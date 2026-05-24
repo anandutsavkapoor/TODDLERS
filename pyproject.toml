@@ -43,10 +43,15 @@ Documentation = "https://github.com/anandutsavkapoor/toddlers-public#readme"
 where = ["src"]
 
 [tool.setuptools.package-data]
-# Ship only the small pySB99 parameter/grid inputs; large libraries are downloaded.
+# Ship the committed data so the package works out of the box from a wheel as well
+# as an editable install. The single-star feedback database (single_star_tracks.h5)
+# and other regenerated products (*.hdf5) are intentionally NOT listed: they are
+# rebuilt on first use (see examples/build_stochastic_database.py).
 "toddlers" = [
-    "pysb99/pySB99_files/**/*.npy",
-    "database/lines_list/*.dat",
+    "pysb99/pySB99_files/**/*",   # pySB99 tracks/spectra/atmosphere inputs (npy + txt/dat)
+    "database/*.obj",             # SB99/BPASS/pySB99 feedback interpolants (evolution needs these)
+    "database/*_metadata.json",   # feedback-library metadata
+    "database/lines_list/*",      # emission-line lists
     "hpc/templates/*.sh",
     "hpc/README.md",
 ]

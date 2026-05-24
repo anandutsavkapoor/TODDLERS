@@ -1,0 +1,164 @@
+# Full line list with comments
+# Generated from official Cloudy line lists
+#
+# Wavelength units:
+# - No unit specified: Assumed to be Angstroms
+# - 'A': Angstroms
+# - 'm': microns
+# - 'c': centimeters
+#
+# Format: <species> <wavelength> [#comment]
+# Species format examples:
+#   H  1  - Neutral hydrogen
+#   He 2  - Singly ionized helium
+#   O  3  - Doubly ionized oxygen
+#   Blnd  - Blend of several lines
+#
+C  3    977.020A  #index=1, 5 Elow=0   Stout, 1s2.2s2 1S0 -- 1s2.2s.2p 1P1
+n  3    991  #total N III 990
+h  1    1025.72A  #total Lyman-beta 1025
+H  1    1215.67A
+O  5    1218.34
+blnd    1402  #total O IV] 1402; 5 components to line:
+Blnd    1406  #total S IV 1406
+he 2    1640.41A  #total He II Balmer-alpha 1640
+O  3    1660.81
+O  3    1666.15
+blnd    1750  #total N III] 1750 (all components; not computed seperately)
+si 3    1892.03
+c  3    2296.90
+O  3    2320.95
+blnd    2326  #total C II] 2324.69 + 2328.12
+BLND    2335  #total Si II] 2335
+He 1    3187.74
+ne 5    3425.88A
+O  2    3726.03
+O  2    3728.81
+ne 3    3868.76
+He 1    3888.64A
+Ca 2    3933.66
+He 1    3964.73
+Blnd    4026.21A  #He multiplet blend
+S  2    4068.6
+S  2    4076.35
+h  1    4101.73A  #total H-delta
+h  1    4340.46A  #total H-gamma
+O  3    4363.21
+he 2    4685.68A  #total He II 4686 (Paschen-alpha)
+ne 4    4724.17
+Ar 4    4740.12
+H  1    4861.32A
+He 1    4921.93
+o  3    4958.91
+o  3    5006.84
+He 1    5015.68
+n  1    5200.26
+O  1    5577.34
+n  2    5754.59A
+o  1    6363.78
+h  1    6562.80A  #total H-alpha 6563
+n  2    6583.45
+He 1    6678.15
+s  2    6716.44
+s  2    6730.82
+Ar 5    7005.83
+Ar 3    7135.79
+Ar 4    7332.15
+Ar 3    7751.11
+Ca 2    8498.02
+Ca 2    8542.09
+Ca 2    8662.14
+S  3    9068.62
+S  3    9530.62
+h  1    9545.97A
+H  1    1.00494m
+Blnd    1.08302m  #all three lines within multiplet
+H  1    1.09381m
+H  1    1.28181m
+V  7    1.30376m
+Fe 2    1.64355m
+Ti 6    1.71509m
+h  1    1.87510m  #total H Paschen-alpha
+H  1    1.94456m
+si 6    1.96247m
+H  1    2.16553m  #Brackett gamma
+Sc 5    2.31119m
+si 7    2.48071m
+H  1    2.62515m
+Al 5    2.90450m
+Ca 4    3.20610m
+Al 6    3.65932m
+H  1    4.05115m
+Ca 5    4.15739m
+mg 4    4.48711m
+Ar 6    4.52800m
+mg 7    5.49270m
+mg 5    5.60700m
+si 7    6.51288m
+Ar 2    6.98337m
+Na 3    7.31570m
+H  1    7.45782m  #Pfund alpha     6-5
+ne 6    7.65019m
+Ar 5    7.89971m
+Na 6    8.60795m
+Ar 3    8.98898m
+mg 7    9.03094m
+Na 4    9.03096m
+Al 6    9.11329m
+s  4    10.5076m
+Ca 5    11.4792m
+ne 2    12.8101m
+Ar 5    13.0985m
+mg 5    13.5464m
+ne 5    14.3178m
+Na 6    14.3929m
+ne 3    15.5509m
+S  3    18.7078m
+Na 4    21.3162m
+Ar 3    21.8253m
+ne 5    24.3109m
+o  4    25.8863m
+S  3    33.4704m
+si 2    34.8046m
+ne 3    36.0036m
+o  3    51.8004m
+n  3    57.3238m
+o  1    63.1679m
+o  3    88.3323m
+n  2    121.769m
+o  1    145.495m
+c  2    157.636m
+n  2    205.283m
+CO      325.137m  #8-7
+c  1    370.269m
+HNC     413.333m
+HNC     472.351m
+HCN     483.168m
+CS      510.044m
+NH3     523.514m
+HNC     551.041m
+CS      556.372m
+HCN     563.665m
+c  1    609.590m
+CS      611.963m
+CO      650.074m  #4-3
+CN      660.727m
+CN      661.044m
+HNC     661.221m
+HCN     676.373m
+CS      679.920m
+CS      764.867m
+HNC     826.492m
+HCN     845.428m
+CO      866.727m  #3-2
+CS      874.094m
+CN      880.858m
+CN      881.421m
+CN      882.833m
+CS      1019.72m
+HNC     1101.95m
+HCN     1127.22m
+CS      1223.63m
+CO      1300.05m  #2-1
+CS      1529.50m
+CO      2600.05m  #1-0

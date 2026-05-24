@@ -120,10 +120,32 @@ INFALL_RADIUS_RATIO_COVERFRAC = 0.5 # covering fraction becomes unity if shell f
 # Cloudy executable and data directory. Both are environment-overridable so the
 # package runs on any machine without editing source: set CLOUDY_EXE / CLOUDY_DATA_DIR
 # in the environment (the HPC submit scripts do this). The _DEFAULT_CLOUDY_DATA_DIR
-# literal is what scripts/download_data.py rewrites to the local Cloudy data dir.
-_DEFAULT_CLOUDY_DATA_DIR = "/Users/akapoor/cloudy/data"
+# literal is what scripts/download_data.py rewrites to the local Cloudy data dir; it
+# ships empty so no machine-specific path is baked in.
+_DEFAULT_CLOUDY_DATA_DIR = ""
 CLOUDY_EXE = _os.environ.get("CLOUDY_EXE", "cloudy.exe")
-CLOUDY_DATA_DIR = _os.environ.get("CLOUDY_DATA_DIR", _DEFAULT_CLOUDY_DATA_DIR)
+
+
+def _resolve_cloudy_data_dir():
+    """Resolve Cloudy's data directory without baking in a machine path.
+
+    Order: explicit ``$CLOUDY_DATA_DIR`` wins; otherwise derive it from the
+    Cloudy executable (a standard install has ``<cloudy>/source/cloudy.exe``
+    alongside ``<cloudy>/data``); otherwise fall back to the rewritable default
+    (empty unless ``scripts/download_data.py`` has set it)."""
+    env = _os.environ.get("CLOUDY_DATA_DIR")
+    if env:
+        return env
+    import shutil as _shutil
+    exe = CLOUDY_EXE if _os.path.isabs(CLOUDY_EXE) else (_shutil.which(CLOUDY_EXE) or "")
+    if exe:
+        cand = _os.path.join(_os.path.dirname(_os.path.dirname(exe)), "data")
+        if _os.path.isdir(cand):
+            return cand
+    return _DEFAULT_CLOUDY_DATA_DIR
+
+
+CLOUDY_DATA_DIR = _resolve_cloudy_data_dir()
 SMALL_TO_LARGE_MASS_RATIO = 0.1 # modified orion grains' dist, bw 0.05 -- 0.40
 A_0_GRAINS = 0.001  # Lower grain size limit, micron
 A_L_GRAINS = 0.03 # Cutoff for exponential function, micron

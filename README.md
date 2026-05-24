@@ -11,10 +11,14 @@ This is **TODDLERS 2.0**, which adds flexible stellar populations (Starburst99 a
 ```bash
 git clone https://github.com/anandutsavkapoor/toddlers-public.git
 cd toddlers-public
-pip install -e .            # add [dev] for the test/lint tools
+pip install -e .                 # core install
+pip install -e ".[dev]"          # optional: also installs the test/lint tools
+                                 # (pytest, pytest-cov, flake8, black)
 ```
 
-`import toddlers` then works from anywhere.
+`import toddlers` then works from anywhere. The `[dev]` extra is only needed if you
+plan to run the test suite or linters; plain `pip install -e .` is enough to use the
+package.
 
 ### External requirements
 - **Cloudy** (C23+) for the photoionization post-processing. Install separately and put `cloudy.exe` on your `PATH`. The pure-dynamics part runs without Cloudy.

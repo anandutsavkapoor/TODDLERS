@@ -1,0 +1,24 @@
+{
+  "population_name": "example_lowmass",
+  "metallicities": [
+    "LMC",
+    "MW",
+    "MWC"
+  ],
+  "Z_values": [
+    0.006,
+    0.014,
+    0.02
+  ],
+  "spectral_library": "FW",
+  "rotation": false,
+  "time_start_myr": 0.01,
+  "time_end_myr": 31.0,
+  "time_step_myr": 0.1,
+  "generation_date": "2026-04-01T21:37:15.455863",
+  "imf_type": "custom",
+  "custom_star_numbers": {
+    "8.0": 10,
+    "5.0": 20
+  }
+}

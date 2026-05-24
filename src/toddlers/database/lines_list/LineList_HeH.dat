@@ -1,0 +1,174 @@
+# updated 2003 oct 28 to correct for changed line wavelengths
+#
+# this is a large set of H I and He I lines intended for testing Ryan
+# Porter's model of He I emission.  The full set of lines only
+# exist when the size of the default HeI atom is increased with
+# atom he-like helium levels 20 
+# as used in he1n6t4_best.in test case
+#
+# for information on the format of this file, see readme_LineList_dat.txt
+#
+# a list of hydrogen and helium lines only 
+#
+#He I 504.0A
+He 1 512.099A
+He 1 515.617A
+He 1 522.213A
+He 1 537.030A
+He 1 584.334A
+He 1 591.409A
+He 1 625.563A
+He 1 2829.08A
+He 1 2945.10A
+He 1 3187.74
+He 1 3447.59A
+##He 1 3499
+##He 1 3513
+##He 1 3530
+##He 1 3554
+##He 1 3587
+##He 1 3613.64
+##He 1 3634
+##He 1 3705
+##He 1 3733
+#He 1 3784
+##He 1 3806
+# >>chng 13 jul 30, wl from 3819.60 to 3819.61A, increased wl precision to 6 sig. fig.
+## >>chng 18 feb 20, updated spectral label from "He 1" 3819.61A to "Blnd" 3820.71A, update He-like triplet labels and wl
+# >>chng 18 mar 06, wl from 3820.71A to 3819.62A, adjust multiplet Blend WL for refraction index
+Blnd 3819.62A
+# >>chng 13 jul 30, wl from 3867.47A to 3867.48A, increased wl precision to 6 sig. fig.
+## >>chng 18 feb 20, updated spectral label from "He 1" 3867.48A to "Blnd" 3868.59A, update He-like triplet labels and wl
+# >>chng 18 mar 06, wl from 3868.59A to 3867.49A, adjust multiplet Blend WL for refraction index
+Blnd 3867.49A
+##He 1 3872
+##He 1 3878
+# >>chng 21 mar 16, wl from 3888.63 to 3888.64A, update NIST energies
+He 1 3888.64A
+##He 1 3927
+##He 1 3936
+He 1 3964.73
+##He 1 4009
+##He 1 4024
+# >>chng 13 jul 30, wl from 4026.19 to 4026.20A, increased wl precision to 6 sig. fig.
+## >>chng 18 feb 20, updated spectral label from "He 1" 4026.20A to "Blnd" 4027.35A, update He-like triplet labels and wl
+# >>chng 18 mar 06, wl from 4027.35A to 4026.21A, adjust multiplet Blend WL for refraction index
+Blnd 4026.21A # He multiplet blend
+# >>chng 13 jul 30, wl from 4120.81 to 4120.82A, increased wl precision to 6 sig. fig.
+## >>chng 18 feb 20, updated spectral label from "He 1" 4120.82A to "Blnd" 4122.00A, update He-like triplet labels and wl
+# >>chng 18 mar 06, wl from 4122.00A to 4120.84A, adjust multiplet Blend WL for refraction index
+Blnd 4120.84A
+He 1 4143.76
+He 1 4168.97
+He 1 4387.93
+He 1 4437.55
+# >>chng 13 jul 30, wl from 4471.47 to 4471.49A, increased wl precision to 6 sig. fig.
+## >>chng 18 feb 20, updated spectral label from "He 1" 4471.49A to "Blnd" 4472.76A, update He-like triplet labels and wl
+# >>chng 18 mar 06, wl from 4472.76A to 4471.50A, adjust multiplet Blend WL for refraction index
+Blnd 4471.50A
+# >>chng 13 jul 30, wl from 4713.02 to 4713.03A, increased wl precision to 6 sig. fig.
+## >>chng 18 feb 20, updated spectral label from "He 1" 4713.03A to "Blnd" 4714.37A, update He-like triplet labels and wl
+# >>chng 18 mar 06, wl from 4714.37A to 4713.05A, adjust multiplet Blend WL for refraction index
+# >>chng 21 mar 16, wl from 4713.05A to 4713.17A, update NIST energies
+Blnd 4713.17A
+He 1 4921.93
+He 1 5015.68
+# >>chng 21 mar 16, wl from 5047.64 to 5047.74A, update NIST energies
+He 1 5047.74A
+# >>chng 13 jul 30, wl from 5875.61 to 5875.64A, increased wl precision to 6 sig. fig.
+## >>chng 18 feb 20, updated spectral label from "He 1" 5875.64A to "Blnd" 5877.29A, update He-like triplet labels and wl
+# >>chng 18 mar 06, wl from 5877.29A to 5875.66A, adjust multiplet Blend WL for refraction index
+Blnd 5875.66A
+He 1 6678.15
+#He 1 6933
+#He 1 6988
+#He 1 7061
+# >>chng 13 jul 30, wl from 7065.18 to 7065.22A, increased wl precision to 6 sig. fig.
+## >>chng 18 feb 20, updated spectral label from "He 1" 7065.22A to "Blnd" 7067.20A, update He-like triplet labels and wl
+# >>chng 18 mar 06, wl from 7067.20A to 7065.25A, adjust multiplet Blend WL for refraction index
+Blnd 7065.25A
+##He 1 7161
+He 1 7281.35
+##He 1 7298
+He 1 8361.73A
+He 1 8863.66A	# This is 2^1P-2^3S...has E1 and M2 components
+# >>chng 21 mar 16, wl from 9463.57A to 9463.58A, update NIST energies
+He 1 9463.58A
+He 1 9603.44A
+# >>chng 13 jul 30, wl from 1.08299m to 1.08303m, increased wl precision to 6 sig. fig.
+## >>chng 18 feb 20, updated spectral label from "He 1" 1.08303m to "Blnd" 1.08331m, update He-like triplet labels and wl
+# >>chng 18 mar 06, wl from 1.08331m to 1.08302m, adjust multiplet Blend WL for refraction index
+Blnd 1.08302m
+He 1 1.09130m
+# >>chng 21 mar 16, wl from 1.25274m to 1.25275m, update NIST energies
+He 1 1.25275m
+He 1 1.27849m
+He 1 1.27905m
+# >>chng 21 mar 16, wl from 1.28461m to 1.28460m, update NIST energies
+He 1 1.28460m
+He 1 1.29849m
+He 1 1.86854m
+# >>chng 21 mar 16, wl from 1.95430m to 1.95431m, update NIST energies
+He 1 1.95431m
+He 1 2.05813m
+# >>chng 21 mar 16, wl from 2.11180m to 2.11202m, update NIST energies
+He 1 2.11202m
+#H  1 916.4A
+#H  1 917.2A
+#H  1 918.1A
+#H  1 919.4A
+#H  1 921.0A
+#H  1 923.2A
+#H  1 926.2A
+#H  1 930.8A
+#H  1 937.8A
+#H  1 949.7A
+#H  1 972.5A
+# >>chng 17 may 25, wl from 1025.73A to 1025.72A, up Rydberg constant
+H  1 1025.72A
+# >>chng 17 may 26, wl from 1215.68A to 1215.67A, update Rydberg constant
+H  1 1215.67A
+#H  1 3671
+#H  1 3674
+#H  1 3676
+#H  1 3679
+#H  1 3683
+#H  1 3687
+#H  1 3692
+#H  1 3697
+#H  1 3704
+#H  1 3712
+#H  1 3722
+#H  1 3734
+#H  1 3750
+#H  1 3771
+#H  1 3798
+#H  1 3835
+#H  1 3889
+#H  1 3970
+# >>chng 17 may 25, wl from 4101.76 to 4101.73A, up Rydberg constant
+# >>chng 21 mar 16, wl from 4101.73A to 4101.74A, update NIST energies
+# >>chng 21 aug 18, wl from 4101.74A to 4101.73A, revert to PvH energies for H
+H  1 4101.73A
+# >>chng 17 may 25, wl from 4340.49 to 4340.46A, up Rydberg constant
+# >>chng 21 mar 16, wl from 4340.46A to 4340.47A, update NIST energies
+# >>chng 21 aug 18, wl from 4340.47A to 4340.46A, revert to PvH energies for H
+H  1 4340.46A
+# >>chng 17 may 26, wl from 4861.36 to 4861.33A, update Rydberg constant
+# >>chng 20 aug 22, wl from 4861.33A to 4861.32A, switched from computed to tabulated energies for H and He isoseq
+# >>chng 21 mar 16, wl from 4861.32A to 4861.33A, update NIST energies
+# >>chng 21 april 7, H I wl from 4861.33 to 4861.34A, replacing average energy with np energies
+# >>chng 21 aug 18, wl from 4861.34A to 4861.32A, revert to PvH energies for H
+H  1 4861.32A
+# >>chng 17 may 26, wl from 6562.85A to 6562.81A, update Rydberg constant
+# >>chng 20 aug 25, wl from 6562.81A to 6562.80A, switched from computed to tabulated energies for H and He isoseq
+# >>chng 21 mar 16, wl from 6562.80A to 6562.82A, update NIST energies
+# >>chng 21 apr 08, wl from 6562.82A to 6562.83A, up 1-e energies to np
+# >>chng 21 aug 18, wl from 6562.83A to 6562.80A, revert to PvH energies for H
+H  1 6562.80A
+#H  1 8598A
+#H  1 8665A
+#H  1 8750A
+#H  1 8863A
+#H  1 9015A
+#H  1 9229A

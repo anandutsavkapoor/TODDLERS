@@ -1,0 +1,258 @@
+# version of 2006 may 14
+# for information on the format of this file, see readme_LineList_dat.txt
+#
+# this list of lines is appropriate for ionized low-density gas like an
+# HII region 
+#
+C  3   977.020A   #   index=1, 5 Elow=0   Stout, 1s2.2s2 1S0 -- 1s2.2s.2p 1P1
+n  3   991  #   total N III 990
+# >>chng 17 may 25, wl from 1025.73 to 1025.72A, up Rydberg constant
+h  1  1025.72A #    total Lyman-beta 1025
+blnd  1035
+Inci     1215
+Inci     1367
+# >>chng 17 may 26, wl from 1215.68 to 1215.67A, update Rydberg constant
+H  1     1215.67A
+blnd  1240
+BLND  1397
+blnd  1402  #   total O IV] 1402; 5 components to line: 
+Blnd  1406  #   total S IV 1406
+blnd  1486
+blnd 1549
+# >>chng 20 aug 22, wl from 1640.43 to 1640.40A, switched from computed to tabulated energies for H and He isoseq
+# >>chng 21 april 7, wl from 1640.40 to 1640.41A, replacing average energy with np energies
+he 2     1640.41A  #   total He II Balmer-alpha 1640
+blnd  1750   #  total N III] 1750 (all components; not computed seperately)
+blnd  1860
+blnd 1909
+c  3     2296.90
+O  3     2320.95
+blnd  2471
+blnd 2326  #   total C II] 2324.69 + 2328.12
+BLND  2335 #    total Si II] 2335
+blnd  2665
+blnd   2798
+# >>chng 22 jul 09, wl from 3426.03 to 3425.88A, upgrade to Chianti v10
+ne 5  3425.88A
+BA C     0
+BaC      3646
+O  2  3726.03
+blnd  3727
+O  2  3728.81
+ne 3  3868.76
+# >>chng 21 mar 16, wl from 3888.63 to 3888.64A, update NIST energies
+He 1     3888.64A
+Ca 2     3933.66
+S  2     4068.6
+Blnd     4074
+S  2     4076.35
+# >>chng 17 may 25, wl from 4101.76 to 4101.73A, up Rydberg constant
+# >>chng 21 mar 16, wl from 4101.73A to 4101.74A, update NIST energies
+# >>chng 21 aug 18, wl from 4101.74A to 4101.73A, revert to PvH energies for H
+h  1     4101.73A #    total H-delta
+# >>chng 17 may 25, wl from 4340.49 to 4340.46A, up Rydberg constant
+# >>chng 21 mar 16, wl from 4340.46A to 4340.47A, update NIST energies
+# >>chng 21 aug 18, wl from 4340.47A to 4340.46A, revert to PvH energies for H
+h  1     4340.46A  #   total H-gamma
+## >>chng 19 mar 01, change "Blnd" 4363 -> "O  3" 4363.21
+O  3     4363.21
+# >>chng 20 aug 22, wl from 4685.64A to 4685.70A, switched from computed to tabulated energies for H and He isoseq
+# >>chng 21 apr 08, wl from 4685.70 to 4685.68A, up 1-e energies to np
+he 2     4685.68A  #   total He II 4686 (Paschen-alpha)
+# >>chng 20 aug 22, wl from 4685.64A to 4685.70A, switched from computed to tabulated energies for H and He isoseq
+# >>chng 21 apr 08, wl from 4685.70 to 4685.68A, up 1-e energies to np
+Ca B     4685.68A
+ne 4  4724.17
+Ar 4     4740.12
+Inci     4860
+# >>chng 17 may 26, wl from 4861.36 to 4861.33A, update Rydberg constant
+# >>chng 20 aug 22, wl from 4861.33A to 4861.32A, switched from computed to tabulated energies for H and He isoseq
+# >>chng 21 mar 16, wl from 4861.32A to 4861.33A, update NIST energies
+# >>chng 21 april 7, H I wl from 4861.33 to 4861.34A, replacing average energy with np energies
+# >>chng 21 aug 18, wl from 4861.34A to 4861.32A, revert to PvH energies for H
+H  1     4861.32A
+o  3     4958.91
+o  3     5006.84
+n  1  5200.26
+# >>chng 22 jul 09, wl from 5303.01 to 5303.00A, upgrade to Chianti v10
+Fe14     5303.00A
+O  1     5577.34
+# >>chng 22 jul 09, wl from 5754.61 to 5754.59A, upgrade to Chianti v10
+n  2  5754.59A
+# >>chng 13 jul 30, wl from 5875.61 to 5875.64A, increased wl precision to 6 sig. fig.
+## >>chng 18 feb 20, updated spectral label from "He 1" 5875.64A to "Blnd" 5877.29A, update He-like triplet labels and wl
+# >>chng 18 mar 06, wl from 5877.29A to 5875.66A, adjust multiplet Blend WL for refraction index
+Blnd     5875.66A
+blnd  6300
+o  1     6363.78
+# >>chng 17 may 26, wl from 6562.85 to 6562.81A, update Rydberg constant
+# >>chng 20 aug 25, wl from 6562.81A to 6562.80A, switched from computed to tabulated energies for H and He isoseq
+# >>chng 21 mar 16, wl from 6562.80A to 6562.82A, update NIST energies
+# >>chng 21 apr 08, wl from 6562.82A to 6562.83A, up 1-e energies to np
+# >>chng 21 aug 18, wl from 6562.83A to 6562.80A, revert to PvH energies for H
+h  1     6562.80A  #   total H-alpha 6563
+n  2  6583.45
+s  2     6716.44
+Blnd     6720
+s  2     6730.82
+Ar 5     7005.83
+Ar 3     7135.79
+blnd  7325
+Ar 4     7332.15
+Ar 3     7751.11
+blnd  8446
+Ca 2  8498.02
+Ca 2  8542.09
+Ca 2  8662.14
+Ca 2  8542.09
+S  3     9068.62
+#H  1     9229
+S  3     9530.62
+# >>chng 17 may 25, wl from 9545.99 to 9545.93A, up Rydberg constant
+# >>chng 20 aug 22, wl from 9545.93A to 9545.97A, switched from computed to tabulated energies for H and He isoseq
+# >>chng 21 apr 08, wl from 9545.97A to 9545.95A, up 1-e energies to np
+# >>chng 21 aug 18, wl from 9545.95A to 9545.97A, revert to PvH energies for H
+h  1     9545.97A
+# >>chng 13 jul 30, wl from 10829.9 to 1.08303m, increased wl precision to 6 sig. fig.
+## >>chng 18 feb 20, updated spectral label from "He 1" 1.08303m to "Blnd" 1.08331m, update He-like triplet labels and wl
+# >>chng 18 mar 06, wl from 1.08331m to 1.08302m, adjust multiplet Blend WL for refraction index
+Blnd     1.08302m # all three lines within multiplet
+#
+# hydrogen Paschen series
+#
+# >>chng 17 may 25, wl from 1.87511m to 1.87510m, up Rydberg constant
+h  1     1.87510m  #   total H Paschen-alpha
+# >>chng 17 may 25, wl from 1.28181m to 1.28180m, up Rydberg constant
+# >>chng 20 aug 22, wl from 1.28180m to 1.28181m, switched from computed to tabulated energies for H and He isoseq
+H  1     1.28181m
+# >>chng 17 may 25, wl from 1.09381m to 1.09380m, up Rydberg constant
+# >>chng 20 aug 22, wl from 1.09380m to 1.09381m, switched from computed to tabulated energies for H and He isoseq
+H  1     1.09381m
+# >>chng 17 may 25, wl from 1.00494m to 1.00493m, up Rydberg constant
+# >>chng 20 aug 22, wl from 1.00493m to 1.00494m, switched from computed to tabulated energies for H and He isoseq
+# >>chng 21 apr 08, wl from 1.00494m to 1.00493m, up 1-e energies to np
+# >>chng 21 aug 18, wl from 1.00493m to 1.00494m, revert to PvH energies for H
+H  1     1.00494m
+#
+# Brackett series
+#
+# >>chng 20 aug 22, wl from 4.05113m to 4.05115m, switched from computed to tabulated energies for H and He isoseq
+# >>chng 21 mar 16, wl from 4.05115m to 4.05116m, update NIST energies
+# >>chng 21 apr 08, wl from 4.05116m to 4.05115m, up 1-e energies to np
+H  1     4.05115m
+# >>chng 17 may 25, wl from 2.62515m to 2.62513m, up Rydberg constant
+# >>chng 20 aug 22, wl from 2.62513m to 2.62515m, switched from computed to tabulated energies for H and He isoseq
+# >>chng 21 apr 08, wl from 2.62515m to 2.62514m, up 1-e energies to np
+# >>chng 21 aug 18, wl from 2.62514m to 2.62515m, revert to PvH energies for H
+H  1     2.62515m
+# >>chng 17 may 25, wl from 2.16553m to 2.16551m, up Rydberg constant
+# >>chng 20 aug 22, wl from 2.16551m to 2.16553m, switched from computed to tabulated energies for H and He isoseq
+# >>chng 21 apr 08, wl from 2.16553m to 2.16552m, up 1-e energies to np
+# >>chng 21 aug 18, wl from 2.16552m to 2.16553m, revert to PvH energies for H
+H  1     2.16553m # Brackett gamma
+# >>chng 17 may 25, wl from 1.94456m to 1.94454m, up Rydberg constant
+# >>chng 20 aug 22, wl from 1.94454m to 1.94456m, switched from computed to tabulated energies for H and He isoseq
+# >>chng 21 apr 08, wl from 1.94456m to 1.94455m, up 1-e energies to np
+# >>chng 21 aug 18, wl from 1.94455m to 1.94456m, revert to PvH energies for H
+H  1     1.94456m
+#
+# IR and coronal lines
+#
+c  2  157.636m
+# >>chng 22 jul 09, wl from 121.767m to 121.769m, upgrade to Chianti v10
+n  2  121.769m
+# >>chng 22 jul 09, wl from 205.244m to 205.283m, upgrade to Chianti v10
+n  2  205.283m
+n  3  57.3238m
+o  1     63.1679m
+o  1     145.495m
+o  3     51.8004m
+o  3     88.3323m
+# >>chng 22 jul 09, wl from 25.8832m to 25.8863m, upgrade to Chianti v10
+o  4     25.8863m
+ne 2  12.8101m
+ne 3  15.5509m
+ne 3  36.0036m
+# >>chng 22 jul 09, wl from 14.3228m to 14.3178m, upgrade to Chianti v10
+ne 5  14.3178m
+# >>chng 22 jul 09, wl from 24.2065m to 24.3109m, upgrade to Chianti v10
+ne 5  24.3109m
+# >>chng 22 jul 09, wl from 7.64318m to 7.65019m, upgrade to Chianti v10
+ne 6  7.65019m
+# >>chng 22 jul 09, wl from 7.31706m to 7.31570m, upgrade to Chianti v10
+Na 3  7.31570m
+# >>chng 22 jul 09, wl from 9.03098m to 9.03096m, upgrade to Chianti v10
+Na 4  9.03096m
+Na 4  21.3162m
+# >>chng 22 jul 09, wl from 14.3228m to 14.3925m, upgrade to Chianti v10
+# >>chng 24 jun 24, wl from 14.3925m to 14.3929m, update to Chianti v10.1
+Na 6  14.3929m
+# >>chng 22 jul 09, wl from 8.61836m to 8.60825m, upgrade to Chianti v10
+# >>chng 24 jun 24, wl from 8.60825m to 8.60795m, update to Chianti v10.1
+Na 6  8.60795m
+# >>chng 22 jul 09, wl from 4.48712m to 4.48711m, upgrade to Chianti v10
+mg 4   4.48711m
+mg 5   5.60700m
+mg 5   13.5464m
+# >>chng 22 jul 09, wl from 5.50177m to 5.49270m, upgrade to Chianti v10
+mg 7   5.49270m
+# >>chng 22 jul 09, wl from 9.00655m to 9.03094m, upgrade to Chianti v10
+mg 7   9.03094m
+# >>chng 22 jul 09, wl from 3.02765m to 3.02764m, upgrade to Chianti v10
+mg 8   3.02764m
+Al 5  2.90450m
+Al 6  3.65932m
+Al 6  9.11329m
+# >>chng 22 jul 09, wl from 5.82933m to 5.84641m, upgrade to Chianti v10
+Al 8  5.84641m
+# >>chng 22 jul 09, wl from 3.69722m to 3.69719m, upgrade to Chianti v10
+Al 8  3.69719m
+si 2  34.8046m
+si 6  1.96247m
+si 7  2.48071m
+si 7  6.51288m
+si 9  3.92820m
+si 9  2.58394m
+si10  1.43008m
+S  3     18.7078m
+S  3     33.4704m
+s  4  10.5076m
+# >>chng 22 jul 09, wl from 9914A to 9913.98A, upgrade to Chianti v10
+S  8     9913.98A
+# >>chng 24 jun 24, wl from 1.25201m to 1.25196m, update to Chianti v10.1
+s  9     1.25196m
+# >>chng 24 jun 24, wl from 3.75414m to 3.75418m, update to Chianti v10.1
+s  9     3.75418m
+# >>chng 22 jul 09, wl from 1.91960m to 1.91958m, upgrade to Chianti v10
+s 11     1.91958m
+# >>chng 22 jul 09, wl from 1.39238m to 1.39232m, upgrade to Chianti v10
+s 11     1.39232m
+Ar 2  6.98337m
+Ar 3  8.98898m
+Ar 3  21.8253m
+Ar 5  7.89971m
+Ar 5  13.0985m
+Ar 6  4.52800m
+# >>chng 22 jul 09, wl from 5534.02A to 5534.01A, upgrade to Chianti v10
+Ar10     5534.01A
+# >>chng 24 jun 24, wl from 2.59535m to 2.58419m, update to Chianti v10.1
+Ar11     2.58419m
+Ca 4  3.20610m
+Ca 5     4.15739m
+Ca 5     11.4792m
+Ca 8     2.32117m
+Sc 5     2.31119m
+Ti 6     1.71509m
+V  7     1.30376m
+# >>chng 22 jul 09, wl from 1.01065m to 1.01064m, upgrade to Chianti v10
+Cr 8     1.01064m
+# >>chng 22 jul 09, wl from 7968.49 to 7968.48A, upgrade to Chianti v10
+Mn 9     7968.48A
+Ni12     4230.90
+#
+O  3     1660.81
+O  3     1666.15
+O  5  1218.34
+si 3  1892.03
+BLND  2335 # total Si II intensity, all lines in multiplet
+# end HII region line list

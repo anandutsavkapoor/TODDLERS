@@ -1,0 +1,42 @@
+# Lines removed due to high ionization
+# Format: <species> <wavelength> [#comment]
+#
+# Total lines removed: 18
+# Breakdown by ionization level:
+# Ionization +7: 6 lines
+# Ionization +8: 5 lines
+# Ionization +9: 2 lines
+# Ionization +10: 3 lines
+# Ionization +11: 1 lines
+# Ionization +13: 1 lines
+#
+
+# --- Ionization +7 ---
+S  8    9913.98A
+Cr 8    1.01064m
+Ca 8    2.32117m
+mg 8    3.02764m
+Al 8    3.69719m
+Al 8    5.84641m
+
+# --- Ionization +8 ---
+Mn 9    7968.48A
+s  9    1.25196m
+si 9    2.58394m
+s  9    3.75418m
+si 9    3.92820m
+
+# --- Ionization +9 ---
+Ar10    5534.01A
+si10    1.43008m
+
+# --- Ionization +10 ---
+s 11    1.39232m
+s 11    1.91958m
+Ar11    2.58419m
+
+# --- Ionization +11 ---
+Ni12    4230.90
+
+# --- Ionization +13 ---
+Fe14    5303.00A

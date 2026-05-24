@@ -5,7 +5,7 @@ authors:
     given-names: Anand Utsav
     orcid: https://orcid.org/0000-0002-5187-1725
     affiliation: "Sterrenkundig Observatorium, Universiteit Gent, Belgium"
-title: "TODDLERS 2.0: A modular framework for stellar feedback and observables in diverse star-forming environments"
+title: "TODDLERS 2.0: Stellar feedback and observables across diverse IMFs, binary populations, and cloud environments"
 version: 2.0.0
 date-released: 2025-XX-XX  # update on publication
 url: "https://github.com/anandutsavkapoor/toddlers-public"
@@ -16,7 +16,7 @@ preferred-citation:
     - family-names: Kapoor
       given-names: Anand Utsav
       orcid: https://orcid.org/0000-0002-5187-1725
-  title: "TODDLERS 2.0: A modular framework for stellar feedback and observables in diverse star-forming environments"
+  title: "TODDLERS 2.0: Stellar feedback and observables across diverse IMFs, binary populations, and cloud environments"
   journal: "Astronomy & Astrophysics"
   year: 2025
   doi: "XX.XXXX/XXXXXXXX"  # update on publication

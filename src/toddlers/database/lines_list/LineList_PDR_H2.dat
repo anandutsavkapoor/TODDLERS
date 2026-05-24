@@ -1,0 +1,287 @@
+# for information on the format of this file, see readme_LineList_dat.txt
+# >>chng 12 mar 13, add P beta
+# >>chng 06 may 14, add H beta
+# >>chng 06 may 09, add strong optical lines from H+ region
+# >>chng 06 feb 21, add broadband dust continua
+# >>chng 03 oct 28, update wavelengths for some lines
+# for information on the format of this file, see readme_LineList_dat.txt
+#
+# this file should be kept parallel with the version that does not
+# include H2
+#
+# Begin CLOUDY grid output line list...
+#
+# hydrogen lines
+# >>chng 17 may 26, wl from 6562.85A to 6562.81A, update Rydberg constant
+# >>chng 20 aug 25, wl from 6562.81A to 6562.80A, switched from computed to tabulated energies for H and He isoseq
+# >>chng 21 mar 16, wl from 6562.80A to 6562.82A, update NIST energies
+# >>chng 21 apr 08, wl from 6562.82A to 6562.83A, up 1-e energies to np
+# >>chng 21 aug 18, wl from 6562.83A to 6562.80A, revert to PvH energies for H
+H  1   6562.80A  #  Balmer alpha    3-2
+# >>chng 17 may 26, wl from 4861.36A to 4861.33A, update Rydberg constant
+# >>chng 20 aug 22, wl from 4861.33A to 4861.32A, switched from computed to tabulated energies for H and He isoseq
+# >>chng 21 mar 16, wl from 4861.32A to 4861.33A, update NIST energies
+# >>chng 21 april 7, H I wl from 4861.33 to 4861.34A, replacing average energy with np energies
+# >>chng 21 aug 18, wl from 4861.34A to 4861.32A, revert to PvH energies for H
+H  1   4861.32A  #  Balmer beta     4-2
+# >>chng 17 may 25, wl from 1.87511m to 1.87510m, update Rydberg constant
+H  1   1.87510m  # Paschen alpha   4-3
+# >>chng 17 may 25, wl from 1.28181m to 1.28180m, update Rydberg constant
+# >>chng 20 aug 22, wl from 1.28180m to 1.28181m, switched from computed to tabulated energies for H and He isoseq
+H  1   1.28181m  # Paschen beta    5-3
+# >>chng 20 aug 22, wl from 4.05113m to 4.05115m, switched from computed to tabulated energies for H and He isoseq
+# >>chng 21 mar 16, wl from 4.05115m to 4.05116m, update NIST energies
+# >>chng 21 apr 08, wl from 4.05116m to 4.05115m, up 1-e energies to np
+H  1   4.05115m  # Br alpha        5-4
+# >>chng 17 may 25, wl from 2.16553m to 2.16551m, update Rydberg constant
+# >>chng 20 aug 22, wl from 2.16551m to 2.16553m, switched from computed to tabulated energies for H and He isoseq
+# >>chng 21 apr 08, wl from 2.16553m to 2.16552m, up 1-e energies to np
+# >>chng 21 aug 18, wl from 2.16552m to 2.16553m, revert to PvH energies for H
+H  1   2.16553m  #  Br gamma
+#H  1   1.945m   #  Br delta
+# >>chng 17 may 25, wl from 7.45781m to 7.45777m, update Rydberg constant
+# >>chng 20 aug 22, wl from 7.45777m to 7.45782m, switched from computed to tabulated energies for H and He isoseq
+# >>chng 21 apr 08, wl from 7.45782m to 7.45780m, up 1-e energies to np
+# >>chng 21 aug 18, wl from 7.45780m to 7.45782m, revert to PvH energies for H
+H  1   7.45782m  #  Pfund alpha     6-5
+#H  1   12.37m   #  Humphries alpha 7-6
+#H  1   19.06m   #  8-7
+# 
+# strong optical lines from H+ region
+O  3     5006.84
+blnd  3727
+n  2  6583.45
+blnd     6720
+# >>chng 17 may 26, wl from 4861.36 to 4861.33A, update Rydberg constant
+# >>chng 20 aug 22, wl from 4861.33A to 4861.32A, switched from computed to tabulated energies for H and He isoseq
+# >>chng 21 mar 16, wl from 4861.32A to 4861.33A, update NIST energies
+# >>chng 21 april 7, H I wl from 4861.33 to 4861.34A, replacing average energy with np energies
+# >>chng 21 aug 18, wl from 4861.34A to 4861.32A, revert to PvH energies for H
+H  1     4861.32A
+blnd  6300
+blnd 5199
+# >>chng 13 jul 30, wl from 10829.9 to 1.08303m, increased wl precision to 6 sig. fig.
+## >>chng 18 feb 20, updated spectral label from "He 1" 1.08303m to "Blnd" 1.08331m, update He-like triplet labels and wl
+# >>chng 18 mar 06, wl from 1.08331m to 1.08302m, adjust multiplet Blend WL for refraction index
+Blnd     1.08302m # all three lines within multiplet
+#
+# the strong pdr lines
+#
+# carbon monoxide
+CO   2600.05m #  1-0
+CO   1300.05m #  2-1
+CO   866.727m #  3-2
+# >>chng 13 jul 25, wl from 650.075m to 650.074m, increased wl precision to 6 sig. fig.
+CO   650.074m #  4-3
+CO   325.137m #  8-7
+#
+# carbon
+c  1  609.590m
+c  1  370.269m
+c  2  157.636m
+#
+# oxygen
+O  1 63.1679m 
+INWD 63.1679m 
+O  1 145.495m
+# 
+# neon
+ne 2  12.8101m
+ne 3  15.5509m
+ne 3  36.0036m
+#
+# total grain heating, all source, equal to total grain cooling
+grat 0 
+#
+# series of IR bands, mainly dust emission in PDR
+FIR  83.00m
+TIR   1800m
+NIRa 2.850m
+NIRb 3.000m
+MIRa 15.00m
+MIRb 22.50m
+NMIR 21.75m
+TFIR 611.25m
+#
+# Silicon
+si 2  34.8046m
+#
+# Sulphur
+S  3 18.7078m
+S  3 33.4704m
+s  4  10.5076m
+#
+# an FeII line
+Fe 2 1.64355m
+#
+# the H2 lines
+# examine func_lines.lin and .lab in the test suite auto dir
+# to see a current list of H2 lines - search on "H2  " in these files
+# Blnd 2.12100m # blend of several H2 lines with close wavelength match
+# >>chng 16 dec 28, wl from 17.03m to 17.0302m, energies updated to Komasa+2011
+H2   17.0302m # 0-0 S(1)
+# >>chng 16 dec 28, wl from 12.2752m to 12.2753m, energies updated to Komasa+2011
+H2   12.2753m # 0-0 S(2)
+H2   9.66228m # 0-0 S(3)
+# >>chng 16 dec 28, wl from 8.02362m to 8.02285m, energies updated to Komasa+2011
+H2   8.02285m # 0-0 S(4)
+# >>chng 16 dec 28, wl from 6.90725m to 6.90763m, energies updated to Komasa+2011
+H2   6.90763m # 0-0 S(5)
+# >>chng 16 dec 28, wl from 5.80953m to 5.80928m, energies updated to Komasa+2011
+H2   5.80928m # 1-1 S(7)
+# >>chng 16 dec 28, wl from 5.50996m to 5.50968m, energies updated to Komasa+2011
+H2   5.50968m # 0-0 S(7)
+# >>chng 16 dec 28, wl from 2.80176m to 2.80175m, energies updated to Komasa+2011
+H2   2.80175m # 1-0 O(3)
+# >>chng 16 dec 28, wl from 2.73042m to 2.73047m, energies updated to Komasa+2011
+H2   2.73047m # 3-2 Q(3)
+# >>chng 16 dec 28, wl from 2.71922m to 2.71940m, energies updated to Komasa+2011
+H2   2.71940m # 2-1 Q(9)
+# >>chng 16 dec 28, wl from 2.71785m to 2.71788m, energies updated to Komasa+2011
+H2   2.71788m # 3-2 Q(2)
+H2   2.70951m # 3-2 Q(1)
+# >>chng 16 dec 28, wl from 2.62608m to 2.62617m, energies updated to Komasa+2011
+H2   2.62617m # 1-0 O(2)
+# >>chng 16 dec 28, wl from 2.55785m to 2.55781m, energies updated to Komasa+2011
+H2   2.55781m # 2-1 Q(2)
+H2   2.55029m # 2-1 Q(1)
+H2   2.40594m # 1-0 Q(1)
+# >>chng 16 dec 28, wl from 1.74760m to 1.74750m, energies updated to Komasa+2011
+H2   1.74750m # 1-0 S(7)
+# >>chng 16 dec 28, wl from 1.62938m to 1.62941m, energies updated to Komasa+2011
+H2   1.62941m # 11-8 S(7)
+# >>chng 16 dec 28, wl from 1.63092m to 1.63098m, energies updated to Komasa+2011
+H2   1.63098m # 1-0 S(15)
+# >>chng 16 dec 28, wl from 1.63619m to 1.63634m, energies updated to Komasa+2011
+H2   1.63634m # 1-0 S(16)
+# >>chng 16 dec 28, wl from 1.63877m to 1.63873m, energies updated to Komasa+2011
+H2   1.63873m # 1-0 S(12)
+# >>chng 16 dec 28, wl from 1.64487m to 1.64490m, energies updated to Komasa+2011
+H2   1.64490m # 3-1 O(7)
+# >>chng 16 dec 28, wl from 1.64998m to 1.64996m, energies updated to Komasa+2011
+H2   1.64996m # 1-0 S(11)
+# >>chng 16 dec 28, wl from 1.65803m to 1.65804m, energies updated to Komasa+2011
+H2   1.65804m # 7-5 S(0)
+# >>chng 16 dec 28, wl from 1.66604m to 1.66602m, energies updated to Komasa+2011
+H2   1.66602m # 1-0 S(10)
+H2   1.67457m # 1-0 S(19)
+# >>chng 16 dec 28, wl from 1.68726m to 1.68730m, energies updated to Komasa+2011
+H2   1.68730m # 1-0 S(9)
+# >>chng 16 dec 28, wl from 1.69490m to 1.69494m, energies updated to Komasa+2011
+H2   1.69494m # 1-0 S(20)
+# >>chng 16 dec 28, wl from 1.71419m to 1.71427m, energies updated to Komasa+2011
+H2   1.71427m # 1-0 S(8)
+# >>chng 16 dec 28, wl from 1.71901m to 1.71905m, energies updated to Komasa+2011
+H2   1.71905m # 1-0 S(21)
+# >>chng 16 dec 28, wl from 1.74720m to 1.74723m, energies updated to Komasa+2011
+H2   1.74723m # 1-0 S(22)
+# >>chng 16 dec 28, wl from 1.74760m to 1.74750m, energies updated to Komasa+2011
+H2   1.74750m # 1-0 S(7)
+# >>chng 16 dec 28, wl from 1.77967m to 1.77977m, energies updated to Komasa+2011
+H2   1.77977m # 1-0 S(23)
+# >>chng 16 dec 28, wl from 1.78746m to 1.78756m, energies updated to Komasa+2011
+H2   1.78756m # 1-0 S(6)
+# >>chng 16 dec 28, wl from 1.83529m to 1.83526m, energies updated to Komasa+2011
+H2   1.83526m # 1-0 S(5)
+# >>chng 16 dec 28, wl from 1.89145m to 1.89142m, energies updated to Komasa+2011
+H2   1.89142m # 1-0 S(4)
+H2   1.95702m # 1-0 S(3)
+H2   2.03320m # 1-0 S(2)
+H2   2.12125m # 1-0 S(1), THE H2 line in the 2 micron window
+# >>chng 16 dec 28, wl from 2.22269m to 2.22268m, energies updated to Komasa+2011
+H2   2.22268m # 1-0 S(0)
+# >>chng 16 dec 28, wl from 2.41307m to 2.41289m, energies updated to Komasa+2011
+H2   2.41289m # 1-0 Q(2)
+H2   2.42307m # 1-0 Q(3)
+# >>chng 16 dec 28, wl from 2.43683m to 2.43682m, energies updated to Komasa+2011
+H2   2.43682m # 1-0 Q(4)
+H2   2.45408m # 1-0 Q(5)
+H2   2.47510m # 1-0 Q(6)
+# >>chng 16 dec 28, wl from 2.49929m to 2.49928m, energies updated to Komasa+2011
+H2   2.49928m # 1-0 Q(7)
+# >>chng 16 dec 28, wl from 2.52709m to 2.52735m, energies updated to Komasa+2011
+H2   2.52735m # 1-0 Q(8)
+# >>chng 16 dec 28, wl from 2.55983m to 2.55951m, energies updated to Komasa+2011
+H2   2.55951m # 8-6 Q(15)
+# >>chng 16 dec 28, wl from 2.59469m to 2.59480m, energies updated to Komasa+2011
+H2   2.59480m # 1-0 Q(10)
+# >>chng 16 dec 28, wl from 2.63426m to 2.63439m, energies updated to Komasa+2011
+H2   2.63439m # 1-0 Q(11)
+# >>chng 16 dec 28, wl from 2.67820m to 2.67807m, energies updated to Komasa+2011
+H2   2.67807m # 1-0 Q(12)
+# >>chng 16 dec 28, wl from 2.72610m to 2.72601m, energies updated to Komasa+2011
+H2   2.72601m # 1-0 Q(13)
+# >>chng 16 dec 28, wl from 2.77819m to 2.77840m, energies updated to Komasa+2011
+H2   2.77840m # 1-0 Q(14)
+# >>chng 16 dec 28, wl from 2.83537m to 2.83548m, energies updated to Komasa+2011
+H2   2.83548m # 1-0 Q(15)
+# >>chng 16 dec 28, wl from 2.89689m to 2.89688m, energies updated to Komasa+2011
+H2   2.89688m # 4-3 Q(2)
+# >>chng 16 dec 28, wl from 2.96462m to 2.96448m, energies updated to Komasa+2011
+H2   2.96448m # 1-0 Q(17)
+# >>chng 16 dec 28, wl from 3.11688m to 3.11663m, energies updated to Komasa+2011
+H2   3.11663m # 1-0 Q(19)
+# >>chng 16 dec 28, wl from 3.36534m to 3.36496m, energies updated to Komasa+2011
+H2   3.36496m # 0-0 S(22)
+# >>chng 16 dec 28, wl from 3.36794m to 3.36779m, energies updated to Komasa+2011
+H2   3.36779m # 0-0 S(21)
+# >>chng 16 dec 28, wl from 3.37087m to 3.37126m, energies updated to Komasa+2011
+H2   3.37126m # 0-0 S(23)
+# >>chng 16 dec 28, wl from 3.38104m to 3.38108m, energies updated to Komasa+2011
+H2   3.38108m # 6-5 Q(4)
+# >>chng 16 dec 28, wl from 3.38671m to 3.38638m, energies updated to Komasa+2011
+H2   3.38638m # 0-0 S(24)
+# >>chng 16 dec 28, wl from 3.40299m to 3.40323m, energies updated to Komasa+2011
+H2   3.40323m # 0-0 S(19)
+# >>chng 16 dec 28, wl from 3.40989m to 3.41019m, energies updated to Komasa+2011
+H2   3.41019m # 0-0 S(25)
+# >>chng 16 dec 28, wl from 3.43697m to 3.43693m, energies updated to Komasa+2011
+H2   3.43693m # 0-0 S(18)
+# >>chng 16 dec 28, wl from 3.48530m to 3.48542m, energies updated to Komasa+2011
+H2   3.48542m # 0-0 S(17)
+# >>chng 16 dec 28, wl from 3.54606m to 3.54662m, energies updated to Komasa+2011
+H2   3.54662m # 0-0 S(16)
+# >>chng 16 dec 28, wl from 3.62531m to 3.62518m, energies updated to Komasa+2011
+H2   3.62518m # 0-0 S(15)
+# >>chng 16 dec 28, wl from 3.72257m to 3.72267m, energies updated to Komasa+2011
+H2   3.72267m # 0-0 S(14)
+# >>chng 16 dec 28, wl from 3.84534m to 3.84506m, energies updated to Komasa+2011
+H2   3.84506m # 0-0 S(13)
+# >>chng 16 dec 28, wl from 3.99573m to 3.99506m, energies updated to Komasa+2011
+H2   3.99506m # 0-0 S(12)
+# >>chng 16 dec 28, wl from 4.17983m to 4.17994m, energies updated to Komasa+2011
+H2   4.17994m # 0-0 S(11)
+# >>chng 16 dec 28, wl from 4.40836m to 4.40859m, energies updated to Komasa+2011
+H2   4.40859m # 0-0 S(10)
+# >>chng 16 dec 28, wl from 5.05148m to 5.05174m, energies updated to Komasa+2011
+H2   5.05174m # 0-0 S(8)
+# >>chng 16 dec 28, wl from 6.10718m to 6.10690m, energies updated to Komasa+2011
+H2   6.10690m # 0-0 S(6)
+CN        882.833m
+CN        881.421m
+CN        880.858m
+CN        661.044m
+CN        660.727m
+NH3       523.514m 
+HNC       1101.95m  
+HNC       826.492m  
+HNC       661.221m  
+HNC       551.041m  
+HNC       472.351m  
+HNC       413.333m  
+HCN       1127.22m 
+HCN       845.428m 
+HCN       676.373m 
+HCN       563.665m 
+HCN       483.168m 
+CS        1529.50m 
+CS        1223.63m 
+CS        1019.72m 
+CS        874.094m 
+CS        764.867m 
+CS        679.920m 
+CS        611.963m 
+CS        556.372m 
+CS        510.044m 
+
+

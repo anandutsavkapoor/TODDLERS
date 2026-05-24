@@ -21,3 +21,18 @@ libraries (`python scripts/download_data.py`). The Cloudy example additionally n
 `cloudy.exe` on `PATH` and a valid `CLOUDY_DATA_DIR`.
 
 Figures are written next to each script as `<name>.png`.
+
+## More
+
+Beyond the numbered scripts, this directory has:
+
+| Path | What |
+|---|---|
+| `build_stochastic_database.py` | build the single-star feedback database (`single_star_tracks.h5`) the stochastic sampler needs; `--quick` for a smoke build |
+| `paper_figures/` | regenerate every figure in the TODDLERS 2.0 paper (`generate_all_paper_figures.py --fig ...`) — see its README |
+| `stab/` | build SKIRT `.stab` SED libraries (cloud-family + SFR-normalized) from evolution+Cloudy output |
+| `eep_validation/` | validation/diagnostic scripts for the EEP (phase-aligned) mass interpolation used by the stochastic sampler — see its README |
+| `analysis/` | post-processing utilities (e.g. `plot_bpt_single_run.py`) |
+
+For running the two expensive stages (evolution grids, Cloudy post-processing) on a SLURM
+cluster, see `hpc/` here and `src/toddlers/hpc/README.md`.

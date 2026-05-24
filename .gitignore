@@ -22,9 +22,11 @@ venv/
 # Only products our own pipeline can rebuild are ignored. The pySB99 database
 # (pysb99/pySB99_files/*.npy/.txt/.dat, ~151M of raw tracks/spectra/atmosphere
 # inputs) IS committed so pySB99 sampling and SED generation work out of the box.
-src/toddlers/database/*.h5          # single_star_tracks.h5 (built by generate_single_star_database)
+# single_star_tracks.h5 (556M, built by generate_single_star_database)
+src/toddlers/database/*.h5
 src/toddlers/interpolants/**/hdf5/
-*.hdf5                               # recollapse_data_*.hdf5 etc. (rebuilt from evolution runs)
+# recollapse_data_*.hdf5 etc. (rebuilt from the evolution runs)
+*.hdf5
 
 # --- Run outputs ---
 evolution_output/

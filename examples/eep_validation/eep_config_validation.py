@@ -20,7 +20,7 @@ import numpy as np
 
 warnings.filterwarnings("ignore")
 HERE = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.path.dirname(os.path.dirname(HERE))
+ROOT = os.path.join(os.path.dirname(os.path.dirname(HERE)), "src")  # editable-install src/
 sys.path.insert(0, ROOT)
 from toddlers.pysb99.eep_interpolation import (load_feedback_db, load_all_tracks,
                                       interpolate_feedback_pairwise,

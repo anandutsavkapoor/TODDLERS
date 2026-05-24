@@ -23,7 +23,7 @@ import matplotlib.pyplot as plt
 
 warnings.filterwarnings("ignore")
 HERE = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.path.dirname(os.path.dirname(HERE))
+ROOT = os.path.join(os.path.dirname(os.path.dirname(HERE)), "src")  # editable-install src/
 sys.path.insert(0, ROOT)
 from toddlers.pysb99.eep_interpolation import (
     load_all_tracks, load_clean_track, load_feedback_db,

@@ -252,7 +252,8 @@ class SpectralTableGenerator:
         print(f"Generating pySB99 spectral data for IMF: {self.imf}")
         
         # Verify interpolants exist
-        database_dir = os.path.join(src_dir, 'database')
+        from ._paths import get_data_dir
+        database_dir = get_data_dir()  # $TODDLERS_DATA or <pkg>/database
         interpolant_file = os.path.join(database_dir, f'pySB99interpolation_{self.imf}.obj')
         metadata_file = os.path.join(database_dir, f'pySB99interpolation_{self.imf}_metadata.json')
         
