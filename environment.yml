@@ -1,0 +1,33 @@
+# environment.yml
+name: toddlers
+channels:
+  - conda-forge
+
+dependencies:
+  # Core Python
+  - python=3.8
+
+  # Main dependencies
+  - numpy=1.20
+  - scipy=1.8
+  - astropy=4.2
+  - matplotlib=3.4
+  - pandas
+  - h5py
+  - requests
+  - tqdm
+  - psutil
+  - gdown
+
+  # Development dependencies
+  - pip
+  - ipython
+  - jupyter
+  - pytest
+  - pytest-cov
+  - flake8
+  - black
+  - zstandard
+
+  # Optional: PTS (Python Toolkit for SKIRT) - install separately if needed
+  # pip install pts

@@ -1,0 +1,69 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "toddlers"
+version = "2.0.0"
+description = "TODDLERS (Time evolution of Observables including Dust Diagnostics and Line Emission from Regions containing young Stars): 1D feedback-driven shell dynamics coupled with Cloudy photoionization, predicting time-evolving UV-to-mm observables of star-forming regions."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { file = "LICENSE" }
+authors = [{ name = "Anand Utsav Kapoor", email = "anandutsavkapoor@gmail.com" }]
+keywords = ["astrophysics", "HII regions", "stellar feedback", "photoionization", "SED"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Astronomy",
+]
+dependencies = [
+    "numpy",
+    "scipy",
+    "astropy",
+    "matplotlib",
+    "pandas",
+    "h5py",
+    "requests",
+    "tqdm",
+    "psutil",
+    "gdown",
+    "zstandard",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "pytest-cov", "flake8", "black"]
+docs = ["sphinx", "sphinx-rtd-theme"]
+
+[project.urls]
+Homepage = "https://github.com/anandutsavkapoor/toddlers-public"
+Repository = "https://github.com/anandutsavkapoor/toddlers-public"
+Documentation = "https://github.com/anandutsavkapoor/toddlers-public#readme"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+# Ship only the small pySB99 parameter/grid inputs; large libraries are downloaded.
+"toddlers" = [
+    "pysb99/pySB99_files/**/*.npy",
+    "database/lines_list/*.dat",
+    "hpc/templates/*.sh",
+    "hpc/README.md",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "slow: long-running tests (deselect with -m 'not slow')",
+    "cloudy: requires a working Cloudy installation",
+    "data: requires the downloaded stellar/atmosphere data",
+    "hpc: requires the HPC environment",
+]
+addopts = "-m 'not slow and not cloudy and not data and not hpc'"
+
+[tool.black]
+line-length = 100
+
+[tool.flake8]
+max-line-length = 100
+extend-ignore = ["E203", "W503"]

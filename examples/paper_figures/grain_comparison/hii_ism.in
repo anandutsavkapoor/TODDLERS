@@ -1,0 +1,14 @@
+title HII region with ISM-like grains (ratio=0.4)
+table star "BPASS_chab100_bin_burst_resFac10.ascii" age=1.0e6 years log(Z)=-1.854
+Q(H) = 51.5
+hden 2.0 log
+radius 18.5 log
+cosmic rays background
+abundances "solar_GASS10.abn"
+grain "silicate_ratio400_exp3_10.opc" 0.0 log function sublimation
+grain "graphite_ratio400_exp3_10.opc" 0.0 log function sublimation
+grains PAH function 9.775
+stop efrac 0.1 linear
+stop temperature 100K
+set save prefix "hii_ism"
+save last continuum ".cont"

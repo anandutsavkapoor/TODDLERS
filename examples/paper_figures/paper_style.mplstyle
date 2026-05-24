@@ -1,0 +1,58 @@
+# paper_style.mplstyle
+# Publication figure style for A&A papers.
+# Based on photoionization paper (Kapoor et al.) plotting conventions,
+# incorporating Euclid ECEB style requirements (Peter Schneider).
+#
+# Usage:
+#   import matplotlib.pyplot as plt
+#   plt.style.use('path/to/paper_style.mplstyle')
+#
+# A&A column widths:
+#   Single column: 88 mm = 8.8 cm ≈ 3.46 in
+#   Double column: 186 mm = 18.6 cm ≈ 7.32 in
+# Set figsize in cm: figsize=(8.8/2.54, 6.0/2.54)
+
+# ── Font ──────────────────────────────────────────────────────────────
+font.family: serif
+font.size: 9
+mathtext.fontset: dejavuserif
+
+# ── Axes ──────────────────────────────────────────────────────────────
+axes.linewidth: 0.8
+axes.labelsize: 9
+axes.titlesize: 9
+
+# ── Tick marks on ALL FOUR axes (ECEB requirement) ────────────────────
+xtick.direction: in
+ytick.direction: in
+xtick.top: True
+ytick.right: True
+xtick.major.size: 4
+ytick.major.size: 4
+xtick.minor.size: 2
+ytick.minor.size: 2
+xtick.minor.visible: True
+ytick.minor.visible: True
+xtick.major.width: 0.8
+ytick.major.width: 0.8
+xtick.minor.width: 0.5
+ytick.minor.width: 0.5
+xtick.labelsize: 7
+ytick.labelsize: 7
+
+# ── Color cycle ───────────────────────────────────────────────────────
+axes.prop_cycle: cycler('color', ['CB4035', '966ebb', '4683DE', '4BC55A', 'FBA11B', '2F2F2F', '17becf', '7f7f7f', '800000'])
+
+# ── Lines ─────────────────────────────────────────────────────────────
+lines.linewidth: 1.0
+lines.markersize: 4
+
+# ── Legend ─────────────────────────────────────────────────────────────
+legend.fontsize: 7
+legend.frameon: False
+
+# ── Figure ────────────────────────────────────────────────────────────
+figure.dpi: 150
+savefig.dpi: 300
+savefig.bbox: tight
+savefig.pad_inches: 0.03

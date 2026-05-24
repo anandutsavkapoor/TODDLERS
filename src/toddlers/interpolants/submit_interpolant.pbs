@@ -1,0 +1,32 @@
+#!/bin/bash
+#PBS -N gen_interpolant
+#PBS -l nodes=1:ppn=1
+#PBS -l walltime=12:00:00 
+#PBS -l mem=200gb
+#PBS -m abe
+
+# Change to the directory where the job was submitted from
+cd $PBS_O_WORKDIR
+
+# Load required modules
+module purge
+module load SciPy-bundle/2023.07-gfbf-2023a
+module load matplotlib/3.7.2-gfbf-2023a
+
+# Set paths - adjust these as needed
+EVOLUTION_DIR="/kyukon/scratch/gent/vo/000/gvo00053/vsc43602/toddlers_evolution_package/evolution_output/template_BPASS/imf_chab300/star_type_bin/cluster_mode_burst/profile_type_uniform/"
+OUTPUT_DIR="/kyukon/scratch/gent/vo/000/gvo00053/vsc43602/toddlers_evolution_package/interpolants/interp_tables"
+
+# Ensure output directory exists
+mkdir -p $OUTPUT_DIR
+
+# Run the interpolant generator
+echo "Starting interpolant generation at $(date)"
+python3 -u run_interpolant_generator.py \
+    --evolution-dir "$EVOLUTION_DIR" \
+    --output-dir "$OUTPUT_DIR"
+
+echo "Finished at $(date)"
+
+# Optional: Check output directory size
+du -sh "$OUTPUT_DIR"
