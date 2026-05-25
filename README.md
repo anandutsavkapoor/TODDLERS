@@ -11,6 +11,8 @@ This is **TODDLERS 2.0**, which adds flexible stellar populations (Starburst99 a
 ```bash
 git clone https://github.com/anandutsavkapoor/toddlers-public.git
 cd toddlers-public
+python3 -m venv .venv && source .venv/bin/activate   # recommended; required on PEP 668
+                                                     # systems (recent Ubuntu/Debian)
 pip install -e .                 # core install
 pip install -e ".[dev]"          # optional: also installs the test/lint tools
                                  # (pytest, pytest-cov, flake8, black)
@@ -20,8 +22,13 @@ pip install -e ".[dev]"          # optional: also installs the test/lint tools
 plan to run the test suite or linters; plain `pip install -e .` is enough to use the
 package.
 
+Requires Python 3.10+. It runs on current scientific stacks (verified on a clean host
+with Python 3.12, NumPy 2.4, SciPy 1.17) as well as older ones; there are no upper
+version pins on NumPy/SciPy.
+
 ### External requirements
-- **Cloudy** (C23+) for the photoionization post-processing. Install separately and put `cloudy.exe` on your `PATH`. The pure-dynamics part runs without Cloudy.
+- **Cloudy** for the photoionization post-processing (the pure-dynamics part runs without it). Install separately, put `cloudy.exe` on your `PATH`, and run `python scripts/download_data.py` (below) so the TODDLERS stellar-continua tables land in Cloudy's data directory — the photoionization models need them. Verified to build and run with the current release (C25.00); C23+ is expected to work.
+- **Cloudy patch (optional).** `cloudy_patches/` adds one `save` command that exports the gas-phase nebular continuum with dust extinction removed. It is only needed if you want that unattenuated nebular continuum folded into the `noDust` SEDs (the variable-DTM library); the standard pipeline and the default cloud-family SED libraries work with stock Cloudy. Apply it with `cloudy_patches/apply_patch.sh /path/to/cloudy` (verified on C22.00, the 2025 master, and C25.00).
 
 ### Data
 The code ships only small parameter/grid inputs. The large stellar-atmosphere and track libraries, and the BPASS tables, are downloaded on demand; heavy synthesized products (SEDs, interpolants) are built on first use.
