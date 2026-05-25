@@ -143,6 +143,36 @@ If you instead want DTM to affect the **dynamics** (it scales the dust opacity /
 IR trapping), make `dust_to_metal` an axis in the evolution `grid.json` rather than a
 Cloudy sweep; the evolution output paths disambiguate with a `_dtm` suffix.
 
+## Disk and inode quotas (large grids)
+
+A finished Cloudy model leaves ~100 small files per parameter directory, most of them
+diagnostic dumps (`.ovr`, `.heat`, `.cool`, `.grTemp`, ...) the STAB build never reads.
+A big grid (thousands of models × a DTM sweep) therefore hits the cluster's **file-count
+(inode) quota** well before its byte quota. Check both:
+
+```bash
+# Lustre / VSC dodrio: bytes AND files vs their limits
+lfs quota -g <your_group> /path/to/scratch     # 'files' / 'ilimit' columns
+```
+
+To stay under the inode ceiling, `toddlers.hpc.archive_cloudy_output` packs each
+parameter directory's non-essential files into one `output_archive.tar` and removes the
+originals, keeping `.in/.out/.cont/.phy/.rad` loose so the SED interpolant + STAB build
+still reads them (≈47% fewer files per directory). It is fully reversible:
+
+```bash
+python -m toddlers.hpc.archive_cloudy_output cloudy_output            # archive
+python -m toddlers.hpc.archive_cloudy_output cloudy_output --dry-run  # preview
+python -m toddlers.hpc.archive_cloudy_output cloudy_output --untar    # restore
+```
+
+The `campaign.py` orchestrator runs this automatically once the Cloudy grid is complete
+(after the resume gate, before the build); pass `--no-archive-cloudy` to keep all files
+loose. Only models confirmed successful are archived, so a failed model's files stay in
+place for inspection or resume. On shared **project** scratch, watch that the byte and
+inode budgets are co-tenant with other users' runs, and always point `cloudy_output` at
+scratch (not a small `$HOME`/`$DATA` quota).
+
 ## Cluster gotchas (learned the hard way)
 
 - **Launch the worker pool with `srun`, never a bash `... &` loop.** On some

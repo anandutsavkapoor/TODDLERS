@@ -307,6 +307,15 @@ def _submit_postprocess(args, taskdir, after_jobs):
         '  exit 0',
         'fi',
         '[ -n "$RESUME_DEP" ] && echo "[resume] WARNING: still incomplete after $MAXROUND rounds; building with available models"',
+        # ---- archive non-essential Cloudy output (inode relief on large grids) ----
+        # The grid is complete here; pack each parameter dir's diagnostic dumps into one
+        # tar and drop the originals, keeping .in/.out/.cont/.phy/.rad loose so the build
+        # below still reads them. Reversible (archive_cloudy_output --untar). Housekeeping,
+        # so `|| true`: a tar hiccup must not abort the STAB build.
+        ('echo "=== archiving non-essential Cloudy output (inode relief) ==="\n'
+         f"python3 -m toddlers.hpc.archive_cloudy_output "
+         f"{os.path.join(args.toddlers_src, 'cloudy_output')} || true")
+        if args.archive_cloudy else "",
         # ---- build (grid complete) ----
         axis_export,
         pop_export,
@@ -407,6 +416,8 @@ def _stage2_argv(args, leaf):
         a += ["--add-dig"]
     if not args.continue_after_dissolution:
         a += ["--no-continue-after-dissolution"]
+    if not args.archive_cloudy:
+        a += ["--no-archive-cloudy"]
     return a
 
 
@@ -457,6 +468,13 @@ def main(argv=None):
                    help="run post-dissolution models (default on; the STAB grid spans the full time range)")
     p.add_argument("--stab", choices=["both", "cloud", "sfr", "none"], default="both",
                    help="which STAB families to build in post-processing")
+    p.add_argument("--archive-cloudy", action=argparse.BooleanOptionalAction, default=True,
+                   help="after the Cloudy grid is complete, tar each parameter dir's "
+                        "non-essential diagnostic files (keeping .in/.out/.cont/.phy/.rad "
+                        "loose) and remove the originals, to stay under the cluster's inode "
+                        "quota on large grids. Reversible via "
+                        "`python -m toddlers.hpc.archive_cloudy_output <dir> --untar`. "
+                        "Default on; use --no-archive-cloudy to keep all files loose.")
     p.add_argument("--max-resume-rounds", type=int, default=3,
                    help="how many times the post-process resume-gate will resubmit unfinished "
                         "Cloudy tasks (failed or timed-out) before building anyway. Guards "
