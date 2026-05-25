@@ -48,10 +48,25 @@ class Interp2DLinear:
         # (Z is validated upstream, the time grid spans the full evolution), so this only
         # guards the edges. Pass a numeric fill_value to return that constant outside instead.
         self._fill_value = fill_value
+        self._build()
+
+    def _build(self):
+        """(Re)construct the RegularGridInterpolator from the stored node arrays."""
         self._rgi = RegularGridInterpolator(
             (self._y, self._x), self._z,
-            method="linear", bounds_error=False, fill_value=fill_value,
+            method="linear", bounds_error=False, fill_value=self._fill_value,
         )
+
+    # Pickle only the raw node data, never the RegularGridInterpolator itself: scipy's
+    # interpolator internals change between versions (e.g. the `_spline` attribute), so a
+    # pickled RGI built under one scipy fails under another. Storing plain numpy arrays and
+    # rebuilding the RGI on load makes the .obj libraries portable across scipy versions.
+    def __getstate__(self):
+        return {"_x": self._x, "_y": self._y, "_z": self._z, "_fill_value": self._fill_value}
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self._build()
 
     def __call__(self, x, y):
         x = np.atleast_1d(np.asarray(x, dtype=float))
