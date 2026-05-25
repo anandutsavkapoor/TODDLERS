@@ -169,6 +169,16 @@ def run_cloudy_task(row: dict, cloudy_exe: str = None):
                 print(f"[repair] {phase}@{time / MYR_TO_SEC:.2f}Myr: {desc} "
                       f"(attempt {attempt}/{max_attempts})")
 
+        # Post-run integrity: a model can "exit OK" yet write truncated or empty save
+        # files (e.g. the disk filling mid-write). check_cloudy_success() validates the
+        # essential outputs, so a False here means the run is unusable; raise so the
+        # worker records FAIL and the resume gate re-runs it, rather than letting the
+        # build consume empty continuum / line-less HR SEDs.
+        if not output_handler.check_cloudy_success():
+            raise RuntimeError(
+                f"{phase}@{time / MYR_TO_SEC:.3f}Myr exited OK but produced invalid or "
+                f"empty output (truncated save / disk full?)")
+
     info = f"{phase}@{time / MYR_TO_SEC:.3f}Myr"
     if repairs:
         info += f" [repaired: {', '.join(repairs)}]"
