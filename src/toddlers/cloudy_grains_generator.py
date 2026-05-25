@@ -139,7 +139,7 @@ class CloudyGrainsGenerator:
         Create a size distribution (.szd) file with the given parameters.
 
         Args:
-            small_to_large_ratio (float): Desired ratio of mass in small grains (< 0.01 micron) to large grains.
+            small_to_large_ratio (float): Desired ratio of mass in small grains (< 0.03 micron) to large grains.
             n (int): Power of the exponential cutoff (determines exp1, exp2, or exp3).
 
         Returns:
@@ -228,7 +228,7 @@ class CloudyGrainsGenerator:
 
     def generate_grain_commands(self, metallicity_scaling: float, silicate_ratio: float, 
                             graphite_ratio: float, pah_ratio: Optional[float] = None,
-                            n: int = 3, n_bins: int = 10, skip_pah: bool = False) -> str:
+                            n: int = 3, n_bins: int = 10, skip_pah: bool = False) -> list:
         """
         Generate Cloudy commands for grains in the main input file.
 

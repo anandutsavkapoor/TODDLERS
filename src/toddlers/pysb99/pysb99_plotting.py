@@ -1522,7 +1522,7 @@ class PopulationPlotter:
         # Mark important spectral features
         important_lines = {
             'Ly$\\alpha$': 1216,
-            'C\,{\\sc iv}': 1549,
+            'C\\,{\\sc iv}': 1549,
             'H$\\beta$': 4861,
             'H$\\alpha$': 6563
         }
@@ -1609,7 +1609,7 @@ class PopulationPlotter:
         # Mark important spectral features
         important_lines = {
             'Ly$\\alpha$': 1216,
-            'C\,{\\sc iv}': 1549,
+            'C\\,{\\sc iv}': 1549,
             'H$\\beta$': 4861,
             'H$\\alpha$': 6563
         }

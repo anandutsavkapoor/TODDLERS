@@ -564,7 +564,8 @@ class SpectralTableGenerator:
                                                    If None, burst mode is assumed.
 
         Returns:
-            str: Path to the generated (or existing) spectral table file.
+            None. Writes the spectral table into CLOUDY_DATA_DIR (skips if a file
+            with that name already exists).
         """
         # Generate the filename
         filename = self._generate_output_filename(formation_timescale)

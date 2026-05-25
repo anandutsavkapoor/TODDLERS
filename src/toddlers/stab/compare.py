@@ -30,6 +30,22 @@ VARIANTS = ["lr", "hr", "noDust_lr", "noDust_hr"]
 PARAM_AXES = ["Z", "SFE", "n_cl", "M_cl"]
 
 
+def ref_candidates(prefix, var):
+    """Reference filenames to try for one of our variants.
+
+    Our pipeline-native names are ``ToddlersCloudSEDFamily_<prefix>_<var>.stab`` with
+    ``var`` in {lr, hr, noDust_lr, noDust_hr} (the Dust variant carries no token). The
+    shipped SKIRT reference is the post-``rename.py`` convention
+    ``ToddlersSEDFamily_Cloud_<prefix>_<Dust|noDust>_<lr|hr>.stab`` (Dust explicit). Try
+    the renamed form first, then fall back to the native name (ref also un-renamed)."""
+    res = "lr" if var.endswith("lr") else "hr"
+    dust = "noDust" if "noDust" in var else "Dust"
+    return [
+        f"ToddlersSEDFamily_Cloud_{prefix}_{dust}_{res}.stab",  # shipped (renamed)
+        f"ToddlersCloudSEDFamily_{prefix}_{var}.stab",          # pipeline-native
+    ]
+
+
 def axis(d, name):
     return np.asarray(d["axisGrids"][d["axisNames"].index(name)])
 
@@ -99,11 +115,16 @@ def main():
     ours_dir, ref_dir = Path(args.ours_dir), Path(args.ref_dir)
     for var in VARIANTS:
         fn = f"ToddlersCloudSEDFamily_{args.prefix}_{var}.stab"
-        op, rp = ours_dir / fn, ref_dir / fn
-        print(f"\n===== {fn} =====")
-        if not op.exists() or not rp.exists():
-            print(f"  missing: ours={op.exists()} ref={rp.exists()} -> skip")
+        op = ours_dir / fn
+        rp = next((ref_dir / c for c in ref_candidates(args.prefix, var)
+                   if (ref_dir / c).exists()), None)
+        print(f"\n===== {args.prefix} {var} =====")
+        print(f"  ours: {op.name}")
+        if not op.exists() or rp is None:
+            print(f"  missing: ours={op.exists()} ref={rp is not None} "
+                  f"(tried {ref_candidates(args.prefix, var)}) -> skip")
             continue
+        print(f"  ref : {rp.name}")
         compare_variant(op, rp, args.time_tol)
 
 

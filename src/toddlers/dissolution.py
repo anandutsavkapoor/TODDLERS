@@ -27,7 +27,8 @@ class Dissolution:
 
         This method calculates the rates of change for shell radius,
         velocity, mass, and average cloud density during the dissolution process. The dEdt
-        is assumed to be zero in this phase. dn_cloud_avg_dt = 0 for obvious reasons.
+        is assumed to be zero in this phase. dn_cloud_avg_dt is obtained from
+        calculate_dn_cloud_avg_dt() (nonzero only when the dynamic cloud-density model is active).
 
         Returns:
             list: Rates of change for [R, V, M, n_cloud_avg].

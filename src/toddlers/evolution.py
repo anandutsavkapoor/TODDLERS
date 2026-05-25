@@ -377,7 +377,7 @@ class Evolution:
             f"V0={format_value(V0 / KM_TO_CM, '.2f')} km/s, "
             f"E0={format_value(E0, '.2e')} erg, "
             f"M_sh={format_value(self.state.M_sh / M_SUN, '.2e')} M_sun, "
-            f"n_cloud_avg_0 (same as model average density)={format_value(self.state.n_cloud_avg, '.2e')} cm^-3/s"
+            f"n_cloud_avg_0 (same as model average density)={format_value(self.state.n_cloud_avg, '.2e')} cm^-3"
         )
 
         return np.array([R0, V0, E0, self.state.M_sh, self.state.n_cloud_avg])

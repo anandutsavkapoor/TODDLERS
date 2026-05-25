@@ -1,0 +1,228 @@
+diff --git a/source/cont_createmesh.cpp b/source/cont_createmesh.cpp
+index 0cbeb548..cf5c5fe1 100644
+--- a/source/cont_createmesh.cpp
++++ b/source/cont_createmesh.cpp
+@@ -231,6 +231,7 @@ STATIC void rfield_opac_alloc()
+ 	rfield.flux.resize( rfield.nflux_with_check );
+ 	rfield.ConEmitReflec.resize( rfield.nflux_with_check );
+ 	rfield.ConEmitOut.resize( rfield.nflux_with_check );
++	rfield.ConEmitOutUnatt.resize( rfield.nflux_with_check );
+ 	rfield.ConRefIncid.resize( rfield.nflux_with_check );
+ 	rfield.flux_total_incident.resize( rfield.nflux_with_check );
+ 	rfield.reflin.resize( rfield.nflux_with_check );
+diff --git a/source/cont_setintensity.cpp b/source/cont_setintensity.cpp
+index dffc9d1f..65cb41bf 100644
+--- a/source/cont_setintensity.cpp
++++ b/source/cont_setintensity.cpp
+@@ -186,6 +186,7 @@ void ContSetIntensity()
+ 		rfield.ContBoltzAvg[i] = 0.;
+ 		rfield.ConEmitReflec[0][i] = 0.;
+ 		rfield.ConEmitOut[0][i] = 0.;
++		rfield.ConEmitOutUnatt[0][i] = 0.;
+ 		rfield.convoc[i] = factor/rfield.widflx(i)/rfield.anu2(i);
+ 	}
+ 
+diff --git a/source/iter_startend.cpp b/source/iter_startend.cpp
+index 97b7589e..8adcda35 100644
+--- a/source/iter_startend.cpp
++++ b/source/iter_startend.cpp
+@@ -368,6 +368,7 @@ void IterStart()
+ 		rfield.SummedDifSave[i] = rfield.SummedDif[i];
+ 		rfield.ConEmitReflec[0][i] = 0.;
+ 		rfield.ConEmitOut[0][i] = 0.;
++		rfield.ConEmitOutUnatt[0][i] = 0.;
+ 		rfield.ConInterOut[i] = 0.;
+ 		/* save OTS continuum for next iteration */
+ 		rfield.otssav[i][0] = rfield.otscon[i];
+@@ -1053,6 +1054,7 @@ void IterRestart(void)
+ 		rfield.reflin[0][i] = 0.;
+ 		rfield.ConEmitReflec[0][i] = 0.;
+ 		rfield.ConEmitOut[0][i] = 0.;
++		rfield.ConEmitOutUnatt[0][i] = 0.;
+ 		rfield.ConRefIncid[0][i] = 0.;
+ 
+ 		/* escape in the outward direction
+diff --git a/source/parse_save.cpp b/source/parse_save.cpp
+index 90fc7c34..929d8484 100644
+--- a/source/parse_save.cpp
++++ b/source/parse_save.cpp
+@@ -718,26 +718,44 @@ void ParseSave(Parser& p)
+ 
+ 		else if( p.nMatch("DIFF") )
+ 		{
+-			/* diffuse continuum, the locally emitted lines and continuum */
+-			strcpy( save.chSave[save.nsave], "COND" );
+-
+-			/* by default gives lines and continuum separately only for
+-			 * last zone.  The keyword ZONE says to give the total for every
+-			 * zone in one very low row */
+-			if( p.nMatch("ZONE") )
++			if( p.nMatch("UNAT") )
+ 			{
+-				sncatf( chHeader, 
+-					"#energy/%s then emission per zone\n",
+-					save.chConSavEnr[save.nsave] );
+-				save.punarg[save.nsave][0] = 2.;
++				/* save diffuse continuum unattenuated -
++				 * cloud-integrated gas-phase nebular continuum emission
++				 * (free-bound, free-free, two-photon) without
++				 * self-absorption, summed over all zones. Does NOT
++				 * include line emission or grain thermal emission.
++				 * The attenuated version (which does include grains)
++				 * is given alongside for comparison. */
++				strcpy( save.chSave[save.nsave], "CODU" );
+ 
++				sncatf( chHeader,
++					"#energy/%s\tDiffContUnatt\tDiffContAtt\n",
++					save.chConSavEnr[save.nsave] );
+ 			}
+ 			else
+ 			{
+-				sncatf( chHeader, 
+-					"#energy/%s\tConEmitLocal\tDiffuseLineEmission\tTotal\n",
+-					save.chConSavEnr[save.nsave] );
+-				save.punarg[save.nsave][0] = 1.;
++				/* diffuse continuum, the locally emitted lines and continuum */
++				strcpy( save.chSave[save.nsave], "COND" );
++
++				/* by default gives lines and continuum separately only for
++				 * last zone.  The keyword ZONE says to give the total for every
++				 * zone in one very low row */
++				if( p.nMatch("ZONE") )
++				{
++					sncatf( chHeader,
++						"#energy/%s then emission per zone\n",
++						save.chConSavEnr[save.nsave] );
++					save.punarg[save.nsave][0] = 2.;
++
++				}
++				else
++				{
++					sncatf( chHeader,
++						"#energy/%s\tConEmitLocal\tDiffuseLineEmission\tTotal\n",
++						save.chConSavEnr[save.nsave] );
++					save.punarg[save.nsave][0] = 1.;
++				}
+ 			}
+ 		}
+ 
+diff --git a/source/rfield.h b/source/rfield.h
+index 4b02612f..c8b92248 100644
+--- a/source/rfield.h
++++ b/source/rfield.h
+@@ -263,10 +263,18 @@ struct t_rfield : public module, public t_mesh {
+ 
+ 	/** outward diffuse emission continuum (not the interactive one),
+ 	 * this is incremented in radinc because of interplay between absorption
+-	 * and emission - get the outward bremsstrahlung right 
++	 * and emission - get the outward bremsstrahlung right
+ 	 * photons cell-1 cm-2 s-1 */
+ 	Spectrum ConEmitOut;
+ 
++	/** outward diffuse emission continuum, summed over all zones WITHOUT
++	 * attenuation by intervening opacity (opac.tmn). This gives the
++	 * intrinsic gas-phase nebular emission (free-bound, free-free,
++	 * two-photon) integrated over the entire cloud, as if the nebula
++	 * were optically thin to its own radiation. Grain thermal emission
++	 * is excluded. Same units as ConEmitOut: photons cell-1 cm-2 s-1 */
++	Spectrum ConEmitOutUnatt;
++
+ 	/** this is set in RT_diffuse and carries interactive continua */
+ 	vector<realnum> ConInterOut;
+ 
+diff --git a/source/rt_continuum.cpp b/source/rt_continuum.cpp
+index 1a3bb14b..8714212b 100644
+--- a/source/rt_continuum.cpp
++++ b/source/rt_continuum.cpp
+@@ -16,6 +16,7 @@
+ #include "freebound.h"
+ #include "cosmology.h"
+ #include "vectorize.h"
++#include "grainvar.h"
+ 
+ /*cmshft - so Compton scattering shift of spectrum 
+  * this code is a placeholder */
+@@ -237,10 +238,31 @@ void RT_continuum(void)
+ 		rfield.ConInterOut[i] += rfield.DiffuseEscape[i]*(realnum)radius.dVolOutwrd;
+ 		rfield.ConInterOut[i] *= (realnum)AttenuationDilutionFactor;
+ 
+-		// this is not the interacting continuum 
++		// this is not the interacting continuum
+ 		rfield.ConEmitOut[0][i] *= (realnum)AttenuationDilutionFactor;
+ 		rfield.ConEmitOut[0][i] += rfield.ConEmitLocal[nzone][i]*(realnum)radius.dVolOutwrd*opac.tmn[i]/**/;
+ 
++		// gas-phase nebular continuum with DUST extinction removed (SKIRT applies dust
++		// downstream) but GAS extinction RETAINED. Gas continuous opacity matters here -- in
++		// particular the on-the-spot reabsorption of the Lyman continuum -- and removing it
++		// would resurrect an unphysical LyC bump, so we keep it (the gas within-zone escape
++		// opac.tmn is also kept). opac.ExpZone = sexp(opacity_abs*dr/2) carries gas+dust;
++		// rescale it by the gas fraction of the absorption opacity to get the gas-only
++		// inter-zone transmission exp(-(opacity_abs - dust)*dr/2). Subtract grain thermal
++		// emission so the source term is gas-only. This is the emergent ConEmitOut above with
++		// only the dust contribution (extinction + thermal emission) taken out.
++		double dustOpacAbs = ( gv.lgDustOn() && gv.lgGrainPhysicsOn ) ?
++			gv.dstab[i]*dense.gas_phase[ipHYDROGEN] : 0.;
++		double ExpZoneGas = opac.ExpZone[i];
++		if( dustOpacAbs > 0. && opac.opacity_abs[i] > dustOpacAbs )
++			ExpZoneGas = pow( (double)opac.ExpZone[i],
++				(opac.opacity_abs[i] - dustOpacAbs)/opac.opacity_abs[i] );
++		rfield.ConEmitOutUnatt[0][i] *= (realnum)(ExpZoneGas*DilutionHere);
++		realnum gasEmit = rfield.ConEmitLocal[nzone][i];
++		if( gv.lgDustOn() && gv.lgGrainPhysicsOn )
++			gasEmit -= gv.GrainEmission[i];
++		rfield.ConEmitOutUnatt[0][i] += gasEmit*(realnum)radius.dVolOutwrd*opac.tmn[i];
++
+ 		// set occupation numbers, first attenuated incident continuum 
+ 		rfield.OccNumbIncidCont[i] = rfield.flux[0][i]*rfield.convoc[i];
+ 
+diff --git a/source/save_do.cpp b/source/save_do.cpp
+index 57bab4cb..16f4bcdd 100644
+--- a/source/save_do.cpp
++++ b/source/save_do.cpp
+@@ -69,6 +69,7 @@ enum cont_type { CT_INCI,       // incident continuum, not attenuated
+ 		 CT_OUTW_INCI,  // incident continuum, attenuated through cloud
+ 		 CT_REFL_INCI,  // incident continuum, reflected towards observer
+ 		 CT_OUTW_DIFF,  // diffuse emission, attenuated through cloud
++		 CT_OUTW_DIFF_UNATT, // diffuse emission, summed over all zones, NO attenuation
+ 		 CT_REFL_DIFF,  // diffuse emission, reflected towards observer
+ 		 CT_OUTW_LIN,   // line emission, attenuated through cloud
+ 		 CT_REFL_LIN,   // line emission, reflected towards observer
+@@ -119,6 +120,9 @@ inline double flxCell(long j, long nEmType, cont_type ct, bool lgForceConserve =
+ 	case CT_OUTW_DIFF:
+ 		val = rfield.ConEmitOut.get_flux(nEmType, j) * double(geometry.covgeo) * factor*radius.PI4_Radius_sq;
+ 		break;
++	case CT_OUTW_DIFF_UNATT:
++		val = rfield.ConEmitOutUnatt.get_flux(nEmType, j) * double(geometry.covgeo) * factor*radius.PI4_Radius_sq;
++		break;
+ 	case CT_REFL_DIFF:
+ 		val = rfield.ConEmitReflec.get_flux(nEmType, j) * double(geometry.covgeo) * factor*radius.PI4_rinner_sq;
+ 		break;
+@@ -1121,6 +1125,28 @@ void SaveDo(
+ 				}
+ 			}
+ 
++			else if( strcmp(save.chSave[ipPun],"CODU") == 0 )
++			{
++				/* save diffuse continuum unattenuated -
++				 * cloud-integrated gas-phase nebular continuum emission
++				 * (free-bound, free-free, two-photon) summed over all
++				 * zones WITHOUT self-absorption (no opac.tmn factor).
++				 * Does NOT include line emission or grain thermal
++				 * emission. */
++				if( lgLastOnly )
++				{
++					for( j=0; j<rfield.nflux; j = j+save.ncSaveSkip)
++					{
++						double diffcont_unatt = flxCell(j, 0, CT_OUTW_DIFF_UNATT);
++						double diffcont_att = flxCell(j, 0, CT_OUTW_DIFF);
++						fprintf( save.params[ipPun].ipPnunit, "%.5e\t%.3e\t%.3e\n",
++						  AnuUnit(rfield.anu(j)),
++						  diffcont_unatt,
++						  diffcont_att );
++					}
++				}
++			}
++
+ 			else if( strcmp(save.chSave[ipPun],"CONE") == 0 )
+ 			{
+ 				/* save emitted continuum */

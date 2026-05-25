@@ -7,9 +7,11 @@ from .utils import is_file_stable
 class CloudyOutputHandler:
     """
     Handler for Cloudy output files with optional absolute path support.
-    
-    Changes to the specified absolute directory on initialization if provided,
-    and restores the original directory when the object is destroyed.
+
+    If ``absolute_path`` is given, changes to that directory on initialization
+    (recording the previous working directory in ``self.orig_dir``). It does NOT
+    change back automatically; the caller is responsible for restoring the
+    working directory if needed.
     """
     def __init__(self, model_prefix, time, absolute_path=None, check_file_stability=False, parse_data=True):
         """
@@ -262,16 +264,52 @@ class CloudyOutputHandler:
 
         Returns:
             dict containing wavelength and continua (incident, transmitted,
-            observed, observed_no_lines) in Cloudy units.
+            observed, observed_no_lines) in Cloudy units. Also includes
+            'nebular_unatt' (the unattenuated diffuse nebular continuum from the
+            patched ".diffContUnatt" save) when that file is present and was
+            written by a patched Cloudy; the key is absent otherwise.
         """
         cont_data = self.outputs['continuum']
-        return {
+        out = {
             'nu': cont_data['nu'], # col 1
-            'incident': cont_data['incident'], # col 2 
-            'transmitted': cont_data['trans'], # col 3 => transmitted incident, no effect of covering fraction 
-            'observed': cont_data['net_trans'], # col 5 =>  observed continua, affected by covering fraction 
+            'incident': cont_data['incident'], # col 2
+            'transmitted': cont_data['trans'], # col 3 => transmitted incident, no effect of covering fraction
+            'observed': cont_data['net_trans'], # col 5 =>  observed continua, affected by covering fraction
             'observed_no_lines': cont_data['net_trans'] - cont_data['outlin'] # col 9 - col 5 =>  observed continua without line emission
         }
+        # Unattenuated diffuse nebular continuum (gas-only: free-bound, free-free,
+        # two-photon), from the patched Cloudy ".diffContUnatt" save. Same Cloudy
+        # frequency mesh and units as the .cont columns, so it is index-aligned with
+        # 'incident'. None when the file is absent or the Cloudy build is unpatched.
+        neb = self.get_nebular_continuum_unatt()
+        if neb is not None:
+            out['nebular_unatt'] = neb
+        return out
+
+    def get_nebular_continuum_unatt(self):
+        """Read the unattenuated diffuse nebular continuum (".diffContUnatt", col 2).
+
+        Returns the ``DiffContUnatt`` column aligned to the continuum grid, or ``None``
+        if the file is missing or was written by an unpatched Cloudy (whose
+        ``save diffuse continuum unattenuated`` silently degrades to the standard
+        diffuse continuum, header ``ConEmitLocal ...``). See cloudy_patches/.
+        """
+        path = self.get_file_path('diffContUnatt')
+        if not os.path.exists(path):
+            return None
+        with open(path, 'r') as f:
+            header = f.readline()
+        if 'DiffContUnatt' not in header:
+            print(f"Warning: {path} lacks DiffContUnatt column (unpatched Cloudy?); "
+                  f"nebular continuum not added.")
+            return None
+        neb = np.genfromtxt(path, skip_header=1, usecols=(1,))   # col 2 = DiffContUnatt
+        cont_n = self.outputs['continuum']['nu'].size
+        if neb.size != cont_n:
+            print(f"Warning: .diffContUnatt rows ({neb.size}) != continuum rows "
+                  f"({cont_n}); nebular continuum not added.")
+            return None
+        return neb
 
     def get_line_luminosities(self, use_emergent=False):
         """

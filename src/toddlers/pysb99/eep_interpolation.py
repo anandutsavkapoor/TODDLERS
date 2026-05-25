@@ -17,7 +17,8 @@ its feedback must be assigned somehow. There are two ends of the spectrum:
 
 Primary markers (the phase anchors; full table in MARKER_INFO). Each is grounded in
 a pySTARBURST99 spectral-classifier boundary (P, see pysb99_core.py), a MIST
-primary-EEP criterion (M, Dotter 2016), or a feedback Teff threshold (F):
+primary-EEP criterion (M, Dotter 2016), or a feedback Teff threshold (F)::
+
     ZAMS      track start                                          (M: ZAMS)
     MS_TO     turn-off: logTeff drops 0.05 dex below its run-max   (M: TAMS / turn-off)
     T_DOWN    logTeff < 4.45, ionizing-decline onset               (F; near P WR cut 4.4)
@@ -26,10 +27,12 @@ primary-EEP criterion (M, Dotter 2016), or a feedback Teff threshold (F):
     WC_ON     surface X(C) > X(N) after WN                         (P: WN/WC split, :1337)
     T_UP      logTeff > 4.30 after the minimum, blue return        (P: OB cut 20000 K, :1400)
     END       track end                                            (terminal / pre-SN)
+
 MS_MID (a mid-MS proxy for MIST IAMS) is detected but dropped by default: there is
 no central H to define it and it had no measurable effect in validation.
 
-Method (secondary-EEP placement follows MIST, Dotter 2016, Eq. 1):
+Method (secondary-EEP placement follows MIST, Dotter 2016, Eq. 1)::
+
     1. Detect the primary markers above on each track (`detect_eeps_comprehensive`).
     2. For a pair of bracketing grid masses, take the markers they share (longest
        common subsequence) as phase-aligned segment boundaries.
@@ -39,11 +42,13 @@ Method (secondary-EEP placement follows MIST, Dotter 2016, Eq. 1):
        (Dotter 2016, Eq. 1, with weights w = 1/range^2).
     4. Interpolate feedback in log at fixed EEP, with log-mass as the independent
        variable (`interpolate_feedback_pairwise`).
+
 Validation lives in eep_tests/; the leave-one-out study there shows the
 reconstructed feedback history is insensitive to the within-segment sampler, so
 the structurally principled MIST metric is used.
 
-Raw track column layout (pySB99_files/*_tracks.npy), confirmed by inspection:
+Raw track column layout (in ``pySB99_files/*_tracks.npy``), confirmed by inspection::
+
     col 0  : within-track index (not used)
     col 1  : age                       [yr]
     col 2  : current (actual) mass      [Msun]
@@ -56,6 +61,7 @@ Raw track column layout (pySB99_files/*_tracks.npy), confirmed by inspection:
     col 9  : surface X(O16)             [mass fraction]
     col 10 : (labelled core temperature -- UNRELIABLE, ignored)
     col 11 : log mass-loss rate         [log Msun/yr]
+
 Each track is exactly 400 rows with no trailing padding; age is in years.
 """
 import os

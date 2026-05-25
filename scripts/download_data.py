@@ -6,11 +6,14 @@ This script handles:
 2. Downloading full-resolution BPASS stellar model tables from data.nublado.org
 3. Updating the CLOUDY_DATA_DIR in constants.py
 4. Managing the Cloudy data directory structure
+5. Downloading the single-star feedback database (single_star_tracks.h5) for the
+   stochastic IMF sampler (Google Drive; does not require Cloudy)
 
 The script can:
 - Download all required base resources
 - Download all full-resolution BPASS tables
 - Download specific BPASS tables by IMF and star type
+- Download single_star_tracks.h5 (--stochastic-tracks)
 """
 
 import os
@@ -29,6 +32,16 @@ from toddlers.constants import *
 
 GOOGLE_DRIVE_ID = '12Gk6wJAjtft5huRbl9RJyiD8vscOIjT_'
 MARKER_FILE = 'BPASS_chab100_bin_constantSFR_t2.0e+00myr_resFac10.ascii'
+
+# Google Drive id for the single-star feedback database single_star_tracks.h5 (~556 MB,
+# needed by the stochastic IMF sampler). Set this after uploading the file to Drive and
+# sharing it "anyone with the link". Until then, --stochastic-tracks points users at the
+# reproducible local build (examples/build_stochastic_database.py).
+SINGLE_STAR_TRACKS_DRIVE_ID = '1qfTIy8HLmsaJRjeyRIoNYTmfkPf5x8Lw'
+# Expected MD5 of single_star_tracks.h5; a download that does not match is corrupt/truncated.
+SINGLE_STAR_TRACKS_MD5 = '48e953759dcb0dd54d00111b5f2c1a5d'
+# Below this many MB a "downloaded" file is treated as a failure (e.g. an HTML error page).
+_TRACKS_MIN_MB = 50
 
 def get_cloudy_data_dir() -> Tuple[Optional[str], bool]:
     """
@@ -289,6 +302,75 @@ def download_file(destination: str) -> Optional[str]:
     url = f"https://drive.google.com/uc?id={GOOGLE_DRIVE_ID}"
     return gdown.download(url, destination, quiet=False)
 
+def download_single_star_tracks(overwrite: bool = False) -> bool:
+    """Download the single-star feedback database (``single_star_tracks.h5``) from Google Drive.
+
+    This ~556 MB track library is what the stochastic IMF sampler needs. It is not shipped
+    in the repository (too large) and is not part of the Cloudy-resources bundle; this
+    fetches it into the resolved data directory (``get_database_path()``, i.e.
+    ``$TODDLERS_DATA`` or ``<package>/database``). It does NOT require Cloudy.
+
+    As a reproducible alternative, build it locally with
+    ``examples/build_stochastic_database.py`` (slower, but no download).
+
+    Args:
+        overwrite (bool): Refetch even if a real file is already present.
+
+    Returns:
+        bool: True on success (or if a real file is already present), False otherwise.
+    """
+    try:
+        from toddlers._paths import get_database_path
+    except Exception as e:
+        print(f"Error: cannot resolve the database path ({e}).")
+        return False
+
+    dest = get_database_path()
+    if os.path.exists(dest) and not overwrite:
+        size_mb = os.path.getsize(dest) / 1e6
+        print(f"single_star_tracks.h5 already present ({size_mb:.0f} MB) at {dest}; "
+              f"skipping (use --overwrite to refetch).")
+        return True
+
+    if not SINGLE_STAR_TRACKS_DRIVE_ID:
+        print("single_star_tracks.h5 download is not configured yet "
+              "(SINGLE_STAR_TRACKS_DRIVE_ID is unset in download_data.py).")
+        print("Build it locally instead:  python examples/build_stochastic_database.py")
+        return False
+
+    try:
+        import gdown
+    except ImportError:
+        print("Please install gdown: pip install gdown")
+        return False
+
+    os.makedirs(os.path.dirname(dest), exist_ok=True)
+    url = f"https://drive.google.com/uc?id={SINGLE_STAR_TRACKS_DRIVE_ID}"
+    print(f"Downloading single_star_tracks.h5 (~556 MB) to {dest} ...")
+    out = gdown.download(url, dest, quiet=False, fuzzy=True)
+    if not out or not os.path.exists(dest):
+        print("Error: download failed.")
+        return False
+    size_mb = os.path.getsize(dest) / 1e6
+    if size_mb < _TRACKS_MIN_MB:
+        print(f"Warning: downloaded file is only {size_mb:.1f} MB (expected ~556 MB); "
+              f"the Drive link may be wrong or rate-limited. Inspect {dest}.")
+        return False
+    if SINGLE_STAR_TRACKS_MD5:
+        import hashlib
+        h = hashlib.md5()
+        with open(dest, 'rb') as fh:
+            for chunk in iter(lambda: fh.read(1 << 20), b''):
+                h.update(chunk)
+        if h.hexdigest() != SINGLE_STAR_TRACKS_MD5:
+            print(f"Error: MD5 mismatch (got {h.hexdigest()}, expected "
+                  f"{SINGLE_STAR_TRACKS_MD5}); download is corrupt. Removing {dest}.")
+            os.remove(dest)
+            return False
+    print(f"single_star_tracks.h5 installed ({size_mb:.0f} MB).")
+    return True
+
+
 def extract_and_organize(zip_path: str, extract_path: str) -> bool:
     """
     Extract and organize files from the downloaded zip.
@@ -353,7 +435,9 @@ def main():
     --full-bpass: Download all full-resolution BPASS tables
     --bpass-imf: Download specific BPASS table - specify IMF
     --bpass-stars: Download specific BPASS table - specify star type
-    
+    --stochastic-tracks: Download single_star_tracks.h5 (no Cloudy needed)
+    --overwrite: with --stochastic-tracks, refetch even if present
+
     Returns:
         int: Exit code (0 for success, 1 for failure)
     """
@@ -364,10 +448,19 @@ def main():
                       help='Download specific BPASS table: choose IMF')
     parser.add_argument('--bpass-stars', choices=['sin', 'bin'],
                       help='Download specific BPASS table: choose star type')
+    parser.add_argument('--stochastic-tracks', action='store_true',
+                      help='Download single_star_tracks.h5 (stochastic sampler DB); does not need Cloudy')
+    parser.add_argument('--overwrite', action='store_true',
+                      help='With --stochastic-tracks: refetch even if the file is already present')
     args = parser.parse_args()
-    
+
     print("Starting TODDLERS data installation check...")
-    
+
+    # The stochastic track database lives in the package data dir, not the Cloudy data
+    # dir, and fetching it must not require a Cloudy install -> handle it before that check.
+    if args.stochastic_tracks:
+        return 0 if download_single_star_tracks(overwrite=args.overwrite) else 1
+
     cloudy_data_dir, should_update = get_cloudy_data_dir()
     if not cloudy_data_dir:
         sys.exit(1)

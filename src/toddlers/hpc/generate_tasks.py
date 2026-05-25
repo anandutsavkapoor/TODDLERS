@@ -15,6 +15,8 @@ Two modes:
 
 Examples
 --------
+::
+
     python -m toddlers.hpc.generate_tasks evolution --grid grid.json -o tasks
     # STAB production (default time grid is 'toddlers_v1', as the interpolant requires):
     python -m toddlers.hpc.generate_tasks cloudy --input-dir evolution_output \

@@ -33,7 +33,6 @@ class TimeGridGenerator:
 
         Args:
             t_start (float): Initial time in seconds
-            t_max (float): Maximum simulation time in seconds
             dissolution_time (float, optional): Time of shell dissolution
             interpolants (dict, optional): Dictionary of interpolation functions:
                 - radius_interp: Shell radius interpolator

@@ -148,7 +148,7 @@ class TODDLERSTimeSeriesStabGenerator:
             wl_grid_meters = wl_grid_linear * 1e-6  # Convert microns to meters
             self.logger.info(f"Converting wavelength grid from microns to meters")
         else:
-            # If the interpolator already uses meters, no conversion neede[d
+            # If the interpolator already uses meters, no conversion needed
             wl_grid_meters = wl_grid_linear
             
         self.logger.info(f"Extracted wavelength grid with {len(wl_grid_meters)} points")

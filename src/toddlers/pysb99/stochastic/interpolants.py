@@ -318,9 +318,10 @@ def generate_cloudy_spectral_table(
     
     Examples
     --------
-    >>> # After sampling population
-    >>> masses, ages, _ = sample_stochastic_population(...)
-    >>> 
+    >>> # After sampling the population (m_upper is required)
+    >>> masses = sample_imf_discrete(1e6, 'database.h5', 'MW', m_upper=100.)
+    >>> ages = sample_ages(len(masses), t_sf_myr=5.0)
+    >>>
     >>> # Generate Cloudy table
     >>> table_path = generate_cloudy_spectral_table(
     ...     masses, ages, 'database.h5', 'MW',

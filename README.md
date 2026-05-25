@@ -24,10 +24,17 @@ package.
 - **Cloudy** (C23+) for the photoionization post-processing. Install separately and put `cloudy.exe` on your `PATH`. The pure-dynamics part runs without Cloudy.
 
 ### Data
-The code ships only small parameter/grid inputs. The large stellar-atmosphere and track libraries, and the BPASS tables, are downloaded on demand; heavy synthesized products (the single-star feedback database, SEDs, interpolants) are built on first use.
+The code ships only small parameter/grid inputs. The large stellar-atmosphere and track libraries, and the BPASS tables, are downloaded on demand; heavy synthesized products (SEDs, interpolants) are built on first use.
 
 ```bash
 python scripts/download_data.py        # fetch base libraries + BPASS tables
+```
+
+The single-star feedback database (`single_star_tracks.h5`, ~556 MB) the **stochastic** IMF sampler needs is distributed separately (it does not require Cloudy). Either download it or build it locally:
+
+```bash
+python scripts/download_data.py --stochastic-tracks   # download (Google Drive)
+python examples/build_stochastic_database.py          # or build it locally
 ```
 
 ## Quickstart

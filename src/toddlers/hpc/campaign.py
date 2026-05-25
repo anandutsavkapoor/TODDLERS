@@ -267,6 +267,10 @@ def _submit_postprocess(args, taskdir, after_jobs):
                           f"TODDLERS_STAB_TEMPLATE={template} "
                           f"TODDLERS_STAB_IMF={imf} "
                           f"TODDLERS_STAB_STARTYPE={star_type}")
+    # The v2-DTM SEDs include the unattenuated diffuse nebular continuum in the noDust
+    # variant (paper Appendix B); enable it when running a DTM sweep. Requires the
+    # patched Cloudy (cloudy_patches/) so ".diffContUnatt" carries the DiffContUnatt column.
+    neb_export = "export TODDLERS_STAB_NEBULAR_CONT=1" if args.dust_to_metal else ""
     lines = [
         "#!/bin/bash",
         "#SBATCH --job-name=campaign_stab",
@@ -306,6 +310,7 @@ def _submit_postprocess(args, taskdir, after_jobs):
         # ---- build (grid complete) ----
         axis_export,
         pop_export,
+        neb_export,
         f"cd {args.stab_dir}",
         'PREFIX="$(python3 -c \'from toddlers.stab import config; print(config.MODEL_PREFIX)\')"',
         "mkdir -p hdf5",

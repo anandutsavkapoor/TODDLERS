@@ -436,11 +436,8 @@ if __name__ == "__main__":
     print("This requires a database file. Attempting to use default location...")
 
     try:
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        database_path = os.path.join(
-            os.path.dirname(os.path.dirname(script_dir)),
-            'src', 'database', 'single_star_tracks.h5'
-        )
+        from toddlers._paths import get_database_path
+        database_path = get_database_path()   # $TODDLERS_DATA or <package>/database
 
         print(f"Using database at: {database_path}")
 

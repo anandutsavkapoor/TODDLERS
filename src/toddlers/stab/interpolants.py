@@ -26,6 +26,7 @@ from toddlers.cloudy_output_handler import CloudyOutputHandler
 from toddlers.constants import *
 import argparse
 from .line_profiles import LineProfileGenerator
+from .config import INCLUDE_NEBULAR_CONTINUUM
 
 def handle_error(func):
     """
@@ -892,7 +893,25 @@ class SEDInterpolantBuilder:
                 base_sed = cont_data['observed_no_lines']
         else:
             base_sed = cont_data['incident']
-            
+            # Optionally add the unattenuated diffuse nebular continuum (free-bound,
+            # free-free, two-photon) so the noDust SED carries intrinsic gas emission,
+            # not just the incident stellar field (paper Appendix B, v2-DTM). Requires
+            # the patched Cloudy ".diffContUnatt" output; index-aligned with 'incident'.
+            if INCLUDE_NEBULAR_CONTINUUM and 'nebular_unatt' in cont_data:
+                neb = cont_data['nebular_unatt']
+                base_sed = base_sed + neb
+                self._neb_added = getattr(self, '_neb_added', 0) + 1
+                if self._neb_added == 1:
+                    # report once per build, with the optical fractional contribution as a sanity value
+                    opt = (cont_data['nu'] > 0.4) & (cont_data['nu'] < 0.7)
+                    frac = float(np.nanmedian(neb[opt] / np.maximum(base_sed[opt], 1e-99))) if opt.any() else float('nan')
+                    print(f"  [nebular] noDust SED: adding unattenuated nebular continuum from "
+                          f".diffContUnatt (DiffContUnatt col); optical median fraction ~{frac:.2f}")
+            elif INCLUDE_NEBULAR_CONTINUUM and not getattr(self, '_neb_warned', False):
+                self._neb_warned = True
+                print("  [nebular] WARNING: INCLUDE_NEBULAR_CONTINUUM set but no 'nebular_unatt' in "
+                      "continuum data (unpatched Cloudy / missing .diffContUnatt?); noDust = incident only.")
+
         # Filter to wavelength range
         valid_indices = ((cont_data['nu'] >= self.wave_min) & 
                         (cont_data['nu'] <= self.wave_max))
@@ -976,6 +995,10 @@ class SEDInterpolantBuilder:
                 data_keys['continuum'].append('observed_no_lines')
         else:
             data_keys['continuum'].append('incident')
+            # Also retain the unattenuated nebular continuum so it survives the
+            # selective cache filter and reaches the noDust SED assembly.
+            if INCLUDE_NEBULAR_CONTINUUM:
+                data_keys['continuum'].append('nebular_unatt')
 
         # Only load line data for high resolution
         if resolution == 'high':

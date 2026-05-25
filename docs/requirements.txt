@@ -1,0 +1,3 @@
+# Documentation build dependencies (used by Read the Docs and local `make html`).
+sphinx>=7
+furo

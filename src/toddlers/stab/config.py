@@ -8,6 +8,14 @@ STELLAR_TEMPLATE = os.environ.get("TODDLERS_STAB_TEMPLATE", "SB99")     # Altern
 IMF_TYPE         = os.environ.get("TODDLERS_STAB_IMF", "kroupa100")     # Alternative: "chab100"
 STAR_TYPE        = os.environ.get("TODDLERS_STAB_STARTYPE", "sin")      # Alternative: "bin"
 
+# Whether the includeDust=false (noDust) SED includes the unattenuated diffuse nebular
+# continuum (free-bound, free-free, two-photon) read from Cloudy's ".diffContUnatt" save.
+# Default off preserves the original incident-only noDust SED (matches the shipped v2
+# cloud-family library). The v2-DTM SEDs enable it (paper Appendix B); the DTM campaign
+# exports TODDLERS_STAB_NEBULAR_CONT=1. Requires the Cloudy nebular-continuum patch
+# (cloudy_patches/) on the run host so ".diffContUnatt" carries the DiffContUnatt column.
+INCLUDE_NEBULAR_CONTINUUM = os.environ.get("TODDLERS_STAB_NEBULAR_CONT", "0") in ("1", "true", "True")
+
 # Create consistent model identifier
 MODEL_PREFIX = f"{STELLAR_TEMPLATE}_{IMF_TYPE}_{STAR_TYPE}"
 # print(f'recollapse_data_{MODEL_PREFIX}.hdf5') # recollapse_data_BPASS_chab100_bin.hdf5

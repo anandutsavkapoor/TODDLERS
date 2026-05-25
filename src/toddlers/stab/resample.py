@@ -17,7 +17,7 @@ class GalaxySimulation:
     n_cl should be in the units of cm-3 within the range of TODDLERS parameters (10 - 320 cm-3)
     init_M_particle or the initial particle mass in the simulation should be in Msun
     Returns: A file which can be used with SEDs from TODDLERS in the form SED = weight * f(t, Z, SFE, n_cl, M_cl)
-    The weight accounts for recollpase in the models 
+    The weight accounts for recollapse in the models
     The output file has columns x, y, z, h, t, Z, SFE, n_cl, M_cl, weight
     """
 
