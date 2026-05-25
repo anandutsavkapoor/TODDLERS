@@ -347,7 +347,9 @@ def download_single_star_tracks(overwrite: bool = False) -> bool:
     os.makedirs(os.path.dirname(dest), exist_ok=True)
     url = f"https://drive.google.com/uc?id={SINGLE_STAR_TRACKS_DRIVE_ID}"
     print(f"Downloading single_star_tracks.h5 (~556 MB) to {dest} ...")
-    out = gdown.download(url, dest, quiet=False, fuzzy=True)
+    # NB: no fuzzy= kwarg -- it was dropped in gdown 6.x and isn't needed for an
+    # explicit uc?id= URL (gdown still handles the large-file confirm token).
+    out = gdown.download(url, dest, quiet=False)
     if not out or not os.path.exists(dest):
         print("Error: download failed.")
         return False

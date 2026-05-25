@@ -20,6 +20,8 @@ libraries from the nodes recovered out of the legacy ``interp2d`` pickles. Becau
 are plain attributes plus one ``RegularGridInterpolator``, they pickle and unpickle on any
 SciPy version with no ``interp2d`` dependency.
 """
+import bisect
+
 import numpy as np
 from scipy.interpolate import RegularGridInterpolator
 
@@ -51,11 +53,16 @@ class Interp2DLinear:
         self._build()
 
     def _build(self):
-        """(Re)construct the RegularGridInterpolator from the stored node arrays."""
+        """(Re)construct the RegularGridInterpolator and the scalar-path lookup tables."""
         self._rgi = RegularGridInterpolator(
             (self._y, self._x), self._z,
             method="linear", bounds_error=False, fill_value=self._fill_value,
         )
+        # Python-list copies of the axes for the scalar fast path: bisect on a list is
+        # ~15x faster than np.searchsorted per call (the search is the bottleneck in the
+        # evolution hot loop). Built here (not pickled) so the .obj stay arrays-only.
+        self._xl = self._x.tolist()
+        self._yl = self._y.tolist()
 
     # Pickle only the raw node data, never the RegularGridInterpolator itself: scipy's
     # interpolator internals change between versions (e.g. the `_spline` attribute), so a
@@ -97,8 +104,8 @@ class Interp2DLinear:
             yv = yg[0] if yv < yg[0] else (yg[-1] if yv > yg[-1] else yv)
         elif xv < xg[0] or xv > xg[-1] or yv < yg[0] or yv > yg[-1]:
             return float(self._fill_value)
-        ix = min(max(int(np.searchsorted(xg, xv) - 1), 0), xg.size - 2)
-        iy = min(max(int(np.searchsorted(yg, yv) - 1), 0), yg.size - 2)
+        ix = min(max(bisect.bisect_left(self._xl, xv) - 1, 0), xg.size - 2)
+        iy = min(max(bisect.bisect_left(self._yl, yv) - 1, 0), yg.size - 2)
         x0, x1 = xg[ix], xg[ix + 1]
         y0, y1 = yg[iy], yg[iy + 1]
         tx = 0.0 if x1 == x0 else (xv - x0) / (x1 - x0)
