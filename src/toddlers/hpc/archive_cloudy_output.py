@@ -59,8 +59,22 @@ class CloudyArchiver:
         """
         self.param_dir = Path(param_dir)
 
-        # Files needed for analysis / the downstream SED interpolant + STAB build.
-        self.essential_extensions = {'.in', '.out', '.cont', '.phy', '.rad'}
+        # Files the downstream SED interpolant + STAB build reads (CloudyOutputHandler):
+        #   .cont          continuum the SED is built from           (get_continuum)
+        #   .diffContUnatt unattenuated diffuse (nebular) continuum   (get_continuum, noDust/DTM)
+        #   .cum/.cumEmer  cumulative line luminosities, HR STABs     (get_line_luminosities)
+        #   .ovr           overview -> ionization structure           (get_ionization_structure)
+        #   .phy           physical -> density/temperature structure  (get_density/temperature)
+        #   .rad           radius -> radial structure                 (get_radial_structure)
+        #   .in/.out       input + run log (reproduction, success check)
+        # These MUST stay loose or the build silently loses lines / nebular continuum / structure.
+        # Only pure diagnostics (.grAbund, .grCont, .grDGrat, .grTemp, .heat, .cool, ...) are
+        # archived. NB: this is why the archiver is safe to run *before* the build; the legacy
+        # set ({.in,.out,.cont,.phy,.rad}) assumed archiving ran only *after* the STABs existed.
+        self.essential_extensions = {
+            '.in', '.out', '.ovr', '.cont', '.diffContUnatt',
+            '.cum', '.cumEmer', '.phy', '.rad',
+        }
 
         # One archive per parameter directory.
         self.archive_path = self.param_dir / 'output_archive.tar'

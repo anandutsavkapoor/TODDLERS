@@ -156,9 +156,14 @@ lfs quota -g <your_group> /path/to/scratch     # 'files' / 'ilimit' columns
 ```
 
 To stay under the inode ceiling, `toddlers.hpc.archive_cloudy_output` packs each
-parameter directory's non-essential files into one `output_archive.tar` and removes the
-originals, keeping `.in/.out/.cont/.phy/.rad` loose so the SED interpolant + STAB build
-still reads them (≈47% fewer files per directory). It is fully reversible:
+parameter directory's pure-diagnostic files (`.grAbund`, `.grCont`, `.grDGrat`,
+`.grTemp`, `.heat`, `.cool`) into one `output_archive.tar` and removes the originals. It
+keeps loose every file the SED interpolant + STAB build reads: `.cont` and
+`.diffContUnatt` (continuum, incl. the unattenuated nebular continuum for the noDust /
+variable-DTM SEDs), `.cum`/`.cumEmer` (cumulative line luminosities for the HR STABs),
+`.ovr`/`.phy`/`.rad` (ionization / density / radial structure), plus `.in`/`.out`. So it
+is safe to run *before* the build (≈25% fewer files per directory). It is fully
+reversible:
 
 ```bash
 python -m toddlers.hpc.archive_cloudy_output cloudy_output            # archive
