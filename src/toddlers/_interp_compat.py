@@ -69,6 +69,11 @@ class Interp2DLinear:
         self._build()
 
     def __call__(self, x, y):
+        # Fast path for the scalar call (the hot path in the evolution loops): do the
+        # bilinear blend directly and skip the RegularGridInterpolator / meshgrid overhead,
+        # which is ~30-100x slower per call. Numerically identical to linear RGI / interp2d.
+        if np.ndim(x) == 0 and np.ndim(y) == 0:
+            return np.array([self._eval_scalar(float(x), float(y))])
         x = np.atleast_1d(np.asarray(x, dtype=float))
         y = np.atleast_1d(np.asarray(y, dtype=float))
         # interp2d sorts its inputs and returns values on the sorted grid.
@@ -83,3 +88,20 @@ class Interp2DLinear:
         out = self._rgi(pts).reshape(yi.size, xi.size)
         # interp2d squeezes singleton dimensions; a scalar call returns shape (1,).
         return out.ravel() if out.size == 1 else np.squeeze(out)
+
+    def _eval_scalar(self, xv, yv):
+        """Bilinear value at a single (x, y); honors the clamp-to-edge / fill_value policy."""
+        xg, yg, z = self._x, self._y, self._z   # z is (len(y), len(x))
+        if self._fill_value is None:
+            xv = xg[0] if xv < xg[0] else (xg[-1] if xv > xg[-1] else xv)
+            yv = yg[0] if yv < yg[0] else (yg[-1] if yv > yg[-1] else yv)
+        elif xv < xg[0] or xv > xg[-1] or yv < yg[0] or yv > yg[-1]:
+            return float(self._fill_value)
+        ix = min(max(int(np.searchsorted(xg, xv) - 1), 0), xg.size - 2)
+        iy = min(max(int(np.searchsorted(yg, yv) - 1), 0), yg.size - 2)
+        x0, x1 = xg[ix], xg[ix + 1]
+        y0, y1 = yg[iy], yg[iy + 1]
+        tx = 0.0 if x1 == x0 else (xv - x0) / (x1 - x0)
+        ty = 0.0 if y1 == y0 else (yv - y0) / (y1 - y0)
+        return (z[iy, ix]     * (1 - tx) * (1 - ty) + z[iy, ix + 1]     * tx * (1 - ty)
+              + z[iy + 1, ix] * (1 - tx) * ty       + z[iy + 1, ix + 1] * tx * ty)
