@@ -71,8 +71,8 @@ import functools
 import logging
 import numpy as np
 import struct
-import pts.simulation as sm
-import pts.utils as ut
+from .. import simulation as sm
+from .. import utils as ut
 
 # -----------------------------------------------------------------
 

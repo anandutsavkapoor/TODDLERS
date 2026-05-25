@@ -154,7 +154,7 @@ MAX_RATIO = 0.43 # max small grain to large grain mass ratio in the grains gener
 ISM_LIKE_RATIO = 0.40 # above this model starts to be like the "ISM" grains in cloudy
 ORION_LIKE_RATIO = 0.01  # below this model starts to be like the "Orion" grains in cloudy
 Z_SOLAR_GASS10 = 0.014 # new estimates, same as in TODDLERS v1
-BPASS_REDUCE_RES_FAC = 1 # reduce wavelenth resolution by this factor, BPASS
+BPASS_REDUCE_RES_FAC = 10 # reduce wavelength resolution by this factor, BPASS (the shipped v2 BPASS tables/STABs use resFac10)
 SB99_REDUCE_RES_FAC = 1 # reduce wavelenth resolution by this factor, SB99
 NUM_STELLAR_SPEC_CLOUDY = 75 # spectra bw 1e5 yr and tmax in the cloudy ascii
 

@@ -109,9 +109,9 @@ reruns it in place, up to `max_repair_attempts` times (default 2; set
 production grid from accumulating permanent failures on issues that a small input
 tweak resolves.
 
-## Production example: the variable-DTM grid
+## Example: the variable-DTM campaign
 
-This is the typical production campaign (the paper's variable dust-to-metal grid): a
+This is the paper's variable dust-to-metal campaign: a
 grid of evolution runs at the **fiducial** DTM, then Cloudy post-processing that
 **sweeps DTM** (the dust-to-metal scaling enters only the Cloudy grain abundances, so
 the shell dynamics are computed once and reused). DIG is **not** included.
@@ -119,7 +119,7 @@ the shell dynamics are computed once and reused). DIG is **not** included.
 ```bash
 # 1) evolution grid at fiducial DTM (no DTM axis). ~2500 runs for the paper axes.
 python -m toddlers.hpc.generate_tasks evolution \
-    --grid examples/hpc/production_grid_dtm.json -o tasks
+    --grid examples/hpc/sb99_2023_grid.json -o tasks
 sbatch submit_evolution.sh                       # worker pool, resume as needed
 
 # 2) Cloudy (no DIG) sweeping DTM. One Cloudy task per (sim, timepoint, DTM);

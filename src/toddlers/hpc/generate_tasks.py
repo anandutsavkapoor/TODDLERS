@@ -16,8 +16,9 @@ Two modes:
 Examples
 --------
     python -m toddlers.hpc.generate_tasks evolution --grid grid.json -o tasks
+    # STAB production (default time grid is 'toddlers_v1', as the interpolant requires):
     python -m toddlers.hpc.generate_tasks cloudy --input-dir evolution_output \
-        --pattern '*.dat' -o tasks --add-dig --method adaptive
+        --pattern '*.dat' -o tasks --dust-to-metal 0.02 0.10 0.20 0.40 0.60 0.80 1.00
 """
 import argparse
 import glob
@@ -113,16 +114,22 @@ def build_parser():
     pc.add_argument("--input-dir", required=True, help="dir of evolution outputs")
     pc.add_argument("--pattern", default="*.dat", help="glob for evolution outputs")
     pc.add_argument("-o", "--outdir", default="tasks", help="output directory")
-    pc.add_argument("--method", default="adaptive",
+    pc.add_argument("--method", default="toddlers_v1",
                     choices=["adaptive", "uniform", "toddlers_v1"],
-                    help="time-sampling method")
+                    help="time-sampling method. Default 'toddlers_v1' is the canonical "
+                         "TODDLERS (Kapoor+23) grid the SED interpolant / STAB pipeline "
+                         "REQUIRES (the interpolant asserts the Cloudy timepoints match it). "
+                         "Use 'adaptive'/'uniform' only for non-STAB experiments.")
     pc.add_argument("--n-points", type=int, default=None,
                     help="number of time points (uniform method)")
     pc.add_argument("--add-dig", action="store_true", help="include DIG models")
     pc.add_argument("--logU-background", type=float, default=None,
                     help="log ionization parameter for the DIG background")
-    pc.add_argument("--continue-after-dissolution", action="store_true",
-                    help="run dissolved models after shell dissolution")
+    pc.add_argument("--continue-after-dissolution", action=argparse.BooleanOptionalAction,
+                    default=True,
+                    help="run models past shell dissolution (default on; the STAB "
+                         "interpolant grid spans the full time range, so keep this on for "
+                         "STAB production. Use --no-continue-after-dissolution otherwise).")
     pc.add_argument("--dust-to-metal", type=float, nargs="+", default=None,
                     help="DTM value(s) to sweep; omit to read each file's own value")
     pc.set_defaults(func=cmd_cloudy)

@@ -2,7 +2,7 @@ from .timeout_manager import TimeoutManager
 from .imports import np, solve_ivp, interp1d, brentq, sys, os, contextmanager, warnings, traceback, pickle
 from .constants import *
 from .exceptions import ManualEventTermination, capture_output
-from .evolution_logging import EvolutionLogger
+from .evolution_logging import EvolutionLogger, NullEvolutionLogger
 from .evolution_data import EvolutionState
 from .initial_conditions import InitialConditions
 from .stellar_feedback import StellarFeedback
@@ -190,7 +190,9 @@ class Evolution:
         if not skip_logger_init:
             self.logger = EvolutionLogger(self.log_path)
             self.logger.info(f"Initializing Evolution with Z={Z}, eta_sf={eta_sf}, n_cl={n_cl} cm^-3, M_cl_init={M_cl_init/M_SUN:.2e} M_sun")
-        
+        else:
+            self.logger = NullEvolutionLogger()
+
         self.logger.info(f"Feedback template is: {self.template}")
         self.logger.info(f"IMF: {self.imf}")
         self.logger.info(f"Star type: {self.star_type}")

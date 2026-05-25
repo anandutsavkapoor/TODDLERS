@@ -1,5 +1,5 @@
 import numpy as np
-from names_and_constants import MASS_BIN_CENTERS, AGE_START, AGE_LIMIT
+from .config import MASS_BIN_CENTERS, AGE_START, AGE_LIMIT
 
 class Particle:
     def __init__(self, x, y, z, h, age, metallicity, sfe, density, mass, cloud_mass=None, decomposed_mass=None):

@@ -270,10 +270,13 @@ def read_stab_file(filepath: Union[str, Path]) -> Dict:
         raise ValueError(f"Error reading .stab file: {str(e)}")
 
 if __name__ == "__main__":
+    import sys
     logging.basicConfig(level=logging.INFO)
-    
+    if len(sys.argv) < 2:
+        sys.exit("usage: python read_stab.py <file.stab>")
+
     try:
-        stab_data = read_stab_file("/Users/akapoor/toddlers_evolution_package/interpolants/resample/stab_output/ToddlersSFRNormalizedSEDFamily_SB99_kroupa100_sin_noDust_hr.stab")
+        stab_data = read_stab_file(sys.argv[1])
         
         print("\nFile Contents Summary:")
         print("=====================")

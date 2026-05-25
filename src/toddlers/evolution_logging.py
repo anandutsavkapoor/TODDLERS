@@ -2,6 +2,19 @@ from .imports import multiprocessing, logging, os, datetime, uuid, time
 from .constants import *
 from .utils import add_banner_to_log, format_row, format_value
 
+class NullEvolutionLogger:
+    """A no-op stand-in for EvolutionLogger.
+
+    Used when ``skip_logger_init=True`` (e.g. for large batches of parallel
+    Evolution instances where opening a log file per run is undesirable). Every
+    attribute access returns a callable that accepts any arguments and does
+    nothing, so the unconditional ``self.logger.*`` calls in Evolution are safe.
+    """
+    def __getattr__(self, name):
+        def _noop(*args, **kwargs):
+            return None
+        return _noop
+
 class EvolutionLogger:
     def __init__(self, base_log_path):
 

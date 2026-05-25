@@ -5,8 +5,8 @@ import pickle
 from enum import Enum
 from typing import Optional, Set
 import matplotlib.pyplot as plt
-from names_and_constants import *
-import pts.storedtable as stab
+from .config import *
+from ..pts import storedtable as stab
 import sys
 import scipy.interpolate
 sys.modules['scipy.interpolate._interpolate'] = scipy.interpolate
@@ -379,6 +379,12 @@ class TODDLERSTimeSeriesStabGenerator:
         # Extract data
         wl_grid = grid_data['wavelength_grid']
         time_grid = grid_data['time_grid']
+        # Clamp the sample indices to the available grid: the defaults assume a large
+        # production grid, but the grid may be smaller (e.g. a minimal test grid).
+        idx_Z = min(idx_Z, len(grid_data['Z_grid']) - 1)
+        idx_eta = min(idx_eta, len(grid_data['etaSF_grid']) - 1)
+        idx_n = min(idx_n, len(grid_data['n_cl_grid']) - 1)
+        idx_M = min(idx_M, len(grid_data['M_cl_grid']) - 1)
         Z = grid_data['Z_grid'][idx_Z]
         eta = grid_data['etaSF_grid'][idx_eta]
         n = grid_data['n_cl_grid'][idx_n]
@@ -483,9 +489,14 @@ def process_combination(generator, sed_type, resolution):
         # Create SED grid
         grid_data = generator.create_sed_grid(interpolator, time_grid)
         
-        # Create sample plot
-        generator.plot_sample_seds(grid_data, sed_type, resolution)
-        
+        # Create sample plot (diagnostic only; must never block the STAB write)
+        try:
+            generator.plot_sample_seds(grid_data, sed_type, resolution)
+        except Exception as e:
+            generator.logger.warning(
+                f"Sample-SED diagnostic plot skipped for {sed_type.value} {resolution.value}: {e}"
+            )
+
         # Write STAB file
         success = generator.write_stab_file(grid_data, sed_type, resolution)
         

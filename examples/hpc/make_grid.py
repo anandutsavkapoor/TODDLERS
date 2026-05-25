@@ -1,7 +1,7 @@
 """Emit an evolution grid JSON from the canonical parameter axes.
 
-The production grid axes (metallicity, SFE, cloud density, cloud mass) are defined
-once in ``examples/stab/names_and_constants.py`` and selected by the stellar
+The paper parameter grid axes (metallicity, SFE, cloud density, cloud mass) are defined
+once in ``toddlers.stab.config`` and selected by the stellar
 template there. This script reads those arrays and writes the ``name -> [values]``
 JSON that ``toddlers.hpc.generate_tasks evolution`` expands, so the grid stays in
 sync with the STAB axes instead of being a hand-maintained static file.
@@ -11,22 +11,20 @@ stage (``generate_tasks cloudy --dust-to-metal ...``), so evolution runs once at
 the fiducial DTM. See hpc/README.md.
 
 Usage:
-    python examples/hpc/make_grid.py -o examples/hpc/production_grid_dtm.json
+    python examples/hpc/make_grid.py -o examples/hpc/sb99_2023_grid.json
 """
 import argparse
 import json
 import os
-import sys
 
 # the canonical axes live with the STAB code
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "stab"))
-import names_and_constants as nc  # noqa: E402
+from toddlers.stab import config as nc
 
 
 def main():
     ap = argparse.ArgumentParser(description="Write the evolution grid JSON.")
     ap.add_argument("-o", "--out", default=os.path.join(os.path.dirname(__file__),
-                    "production_grid_dtm.json"))
+                    "sb99_2023_grid.json"))
     args = ap.parse_args()
 
     grid = {

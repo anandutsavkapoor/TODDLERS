@@ -1,10 +1,10 @@
 import numpy as np
 from pathlib import Path
-import pts.storedtable as stab
+from ..pts import storedtable as stab
 import logging
 from enum import Enum
 from typing import Tuple, Dict, Optional, Set
-from names_and_constants import *
+from .config import *
 import re
 
 class SEDType(Enum):

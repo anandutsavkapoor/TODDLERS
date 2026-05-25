@@ -8,8 +8,8 @@ from tqdm import tqdm
 import psutil
 import pickle
 from astropy import units as u
-from generate_sfr_scaled_sed import SEDmanipulator, SimulationParameters
-from names_and_constants import *
+from .sfr_scaling import SEDmanipulator, SimulationParameters
+from .config import *
 
 class SEDGenerator:
     """Generate SFR-scaled SEDs across the TODDLERS parameter space.

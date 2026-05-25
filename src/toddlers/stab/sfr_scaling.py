@@ -13,8 +13,8 @@ import scipy.interpolate
 sys.modules['scipy.interpolate._interpolate'] = scipy.interpolate
 from scipy.interpolate import RegularGridInterpolator
 import matplotlib.pyplot as plt
-import TODDLERS_recollapse_handling as TORCH
-from names_and_constants import *
+from . import recollapse as TORCH
+from .config import *
 
 # Configure logging
 logging.basicConfig(

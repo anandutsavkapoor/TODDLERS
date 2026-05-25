@@ -1,11 +1,11 @@
 import h5py
 import numpy as np
 import sys
-from cloud_sampling import CloudDistribution
+from .cloud_sampling import CloudDistribution
 import matplotlib.pyplot as plt
 import warnings
-from particle import Particle
-from names_and_constants import *
+from .particles import Particle
+from .config import *
 
 
 def find_closest_value(value, lst):

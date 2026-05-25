@@ -36,7 +36,9 @@ export TMPDIR=/dev/shm
 export CLOUDY_EXE=@CLOUDY_EXE@        # e.g. /data/gent/436/vsc43602/cloudy/source/cloudy.exe
 
 PHASE=${PHASE:?set PHASE=shell|unified|dig|dissolved via --export}
-TASKFILE=@TASKDIR@/cloudy_${PHASE}.tasks
+# TASKFILE defaults to the full phase task list, but can be overridden (e.g. with a
+# `*.resume.tasks` file) via --export=ALL,TASKFILE=... to re-run only the unfinished tasks.
+TASKFILE=${TASKFILE:-@TASKDIR@/cloudy_${PHASE}.tasks}
 RESULTS=@RESULTSDIR@/cloudy_${PHASE}_${SLURM_JOB_ID}.results
 mkdir -p "$(dirname "$RESULTS")"
 

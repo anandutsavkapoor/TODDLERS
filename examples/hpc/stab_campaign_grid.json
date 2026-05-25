@@ -1,0 +1,11 @@
+{
+  "Z": [0.008, 0.02],
+  "eta_sf": [0.025, 0.05],
+  "n_cl": [80.0, 160.0],
+  "M_cl_init": [1e5, 1e6],
+  "template": ["SB99"],
+  "imf": ["kroupa100"],
+  "star_type": ["sin"],
+  "profile_type": ["uniform"],
+  "cluster_formation_mode": ["burst"]
+}

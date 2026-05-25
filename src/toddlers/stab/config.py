@@ -1,10 +1,12 @@
 import numpy as np
 import os
 
-# Stellar population parameters
-STELLAR_TEMPLATE = "SB99"     # Alternative: "BPASS"
-IMF_TYPE = "kroupa100"        # Alternative: "chab100" 
-STAR_TYPE = "sin"            # Alternative: "bin"
+# Stellar population parameters. These default to the SB99/Kroupa/single-star
+# population but can be overridden via environment variables so the STAB stage can
+# match whatever population the evolution sims were run for, without editing this file.
+STELLAR_TEMPLATE = os.environ.get("TODDLERS_STAB_TEMPLATE", "SB99")     # Alternative: "BPASS"
+IMF_TYPE         = os.environ.get("TODDLERS_STAB_IMF", "kroupa100")     # Alternative: "chab100"
+STAR_TYPE        = os.environ.get("TODDLERS_STAB_STARTYPE", "sin")      # Alternative: "bin"
 
 # Create consistent model identifier
 MODEL_PREFIX = f"{STELLAR_TEMPLATE}_{IMF_TYPE}_{STAR_TYPE}"
@@ -34,8 +36,11 @@ if STELLAR_TEMPLATE == 'SB99': # TODDLERS v1
     STAR_FORMATION_EFFICIENCIES = np.array([.01, .025, .05, .075, .1, .125, .15])
     CLOUD_DENSITIES = np.around(10**np.arange(1, 3.5, .30102), 0)  # ~[10-2560] cm^-3
     MASS_BIN_CENTERS = np.array([10**np.around(i, 2) for i in np.arange(5.0, 6.8, .25)])
-    SED_UNIT = 'W/m'
-    WAVELENGTH_UNIT = 'm'
+    # The interpolant produced by generate_interpolants.py is template-agnostic in units:
+    # wavelength in microns, SED in erg/s/micron (the generator converts these to SKIRT's
+    # meters / W/m). Same as the BPASS branch below.
+    SED_UNIT = 'erg/s/micron'
+    WAVELENGTH_UNIT = 'micron'
 elif STELLAR_TEMPLATE == 'BPASS': # v2
     METALLICITIES = np.array([0.001, 0.002, 0.003, 0.004, 0.006, 0.008, 0.010, 0.014, 0.020, 0.030, 0.040])
     STAR_FORMATION_EFFICIENCIES = np.array([.01, .025, .05, .075, .1])
@@ -49,13 +54,25 @@ else:
     # cause explicit. To use another template (e.g. 'pySB99'), add a branch above
     # defining its grid axes, units and recollapse-HDF5 version.
     raise ValueError(
-        f"names_and_constants: no grid axes defined for STELLAR_TEMPLATE="
+        f"config: no grid axes defined for STELLAR_TEMPLATE="
         f"{STELLAR_TEMPLATE!r}. Supported: 'SB99', 'BPASS'. Add a branch for it.")
+
+# Optional environment override of the STAB grid axes. A campaign/driver can set these
+# from the actual evolution sims (its grid.json, or by scanning the .dat filenames) so the
+# STAB stage always matches what was run, without editing this file. Each variable is a
+# comma-separated list; unset = use the template defaults above.
+def _env_grid(name, default):
+    val = os.environ.get(name)
+    return np.array([float(x) for x in val.split(",")]) if val else default
+
+METALLICITIES = _env_grid("TODDLERS_STAB_Z", METALLICITIES)
+STAR_FORMATION_EFFICIENCIES = _env_grid("TODDLERS_STAB_SFE", STAR_FORMATION_EFFICIENCIES)
+CLOUD_DENSITIES = _env_grid("TODDLERS_STAB_NCL", CLOUD_DENSITIES)
 
 # Recollapse-HDF5 schema version. This is GENERATOR-determined, not template-
 # determined: RecollapseDataCollector (the interpolant generator) always writes the
 # nested "v2" schema (recollapse_data/simulations/<key>/recollapse_times_myr), which
-# TODDLERS_recollapse_handling reads and converts to its fast flat form on the fly.
+# toddlers.stab.recollapse reads and converts to its fast flat form on the fly.
 # (The legacy flat "v1" files are no longer produced, so do not set this to 'v1'.)
 RECOLLAPSE_HDF5_VER = 'v2'
 

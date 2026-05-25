@@ -180,6 +180,17 @@ class CloudyGrainsGenerator:
         Returns:
             str: Name of the compiled .opc file (or existing file if already present).
         """
+        # Grain compilation runs Cloudy in its data directory. Fail early and clearly
+        # if that directory is unset/missing (the usual cause: Cloudy is not installed
+        # on this machine), rather than dying later in os.chdir with a cryptic error.
+        if not self.data_dir or not os.path.isdir(self.data_dir):
+            raise RuntimeError(
+                f"Cloudy data directory not found (CLOUDY_DATA_DIR={self.data_dir!r}). "
+                "Compiling grains requires a working Cloudy installation: install Cloudy "
+                "and set CLOUDY_EXE (and/or CLOUDY_DATA_DIR) to point at it. "
+                "TODDLERS' dynamics-only API runs without Cloudy."
+            )
+
         # Construct the expected .opc filename based on Cloudy's naming convention
         opc_file = f"{material}_{szd_file[:-4]}_{n_bins}.opc"
         opc_path = os.path.join(self.data_dir, opc_file)

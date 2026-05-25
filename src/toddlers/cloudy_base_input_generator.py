@@ -404,13 +404,18 @@ class BaseCloudyInputGenerator:
                 
                 commands.extend(line_commands)
                 
-            except FileNotFoundError:
-                self.logger.warning(
-                    f"Lines file not found: {lines_file}. "
-                    f"Please ensure the {line_list_version} line list exists in the database/lines_list directory."
-                )
+            except FileNotFoundError as exc:
+                # Fail fast: silently dropping the line-save commands would produce
+                # continuum-only Cloudy models, and the missing emission lines only
+                # surface much later when the high-resolution SED interpolant is built.
+                raise FileNotFoundError(
+                    f"Line list not found: {lines_file}. The '{line_list_version}' line list "
+                    f"must be present in database/lines_list/ to generate line-emitting models. "
+                    f"Pass save_lines=False to deliberately build continuum-only models."
+                ) from exc
             except Exception as e:
                 self.logger.error(f"Error processing lines file: {str(e)}")
+                raise
         
         # Grain commands - only added if grains is True
         if grains:

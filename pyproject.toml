@@ -55,6 +55,9 @@ where = ["src"]
     "hpc/templates/*.sh",
     "hpc/README.md",
 ]
+# Vendored PTS subset (AGPL-3.0): ship its license and any non-.py data so the
+# StoredTable I/O works from a wheel as well as an editable install.
+"toddlers.pts" = ["**/*", "LICENSE.txt"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

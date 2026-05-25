@@ -72,6 +72,11 @@ from contextlib import contextmanager
 # Third-Party Imports
 ## Scientific Computing
 import numpy as np
+# numpy 2.0 renamed np.trapz -> np.trapezoid (and removed the old name in later 2.x).
+# Restore np.trapz so the package works on both numpy <2 and >=2 without touching the
+# (many) call sites. Imported early via constants, so the alias is in place process-wide.
+if not hasattr(np, "trapz") and hasattr(np, "trapezoid"):
+    np.trapz = np.trapezoid
 import scipy
 from scipy import constants
 from scipy.integrate import cumulative_trapezoid as cumtrapz
