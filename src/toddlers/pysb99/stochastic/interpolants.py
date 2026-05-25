@@ -984,7 +984,7 @@ def create_interpolants_2d(
         
     Notes
     -----
-    This creates real scipy.interpolate.interp2d objects, identical to what
+    This creates real Interp2DLinear objects (toddlers._interp_compat), identical to what
     generate_pysb99_interpolants.py produces. These work seamlessly with
     TODDLERS without any wrapper classes.
     """
@@ -1341,7 +1341,7 @@ def build_stochastic_interpolants_2d(
     interpolants with the same structure as generate_pysb99_interpolants.py by:
     1. Using the SAME IMF realization (masses, ages) for ALL metallicities
     2. Computing feedback for each metallicity using the single-star database
-    3. Building 2D arrays and creating scipy.interpolate.interp2d objects
+    3. Building 2D arrays and creating Interp2DLinear (RGI-backed) objects
     
     Parameters
     ----------
@@ -1551,7 +1551,7 @@ def build_stochastic_interpolants_2d(
         # Interpolant type
         'stochastic': True,
         'interpolant_type': '2D_real',
-        'scipy_interpolant_kind': 'interp2d_linear'
+        'scipy_interpolant_kind': 'Interp2DLinear_RGI'
     }
     
     # Print summary if verbose

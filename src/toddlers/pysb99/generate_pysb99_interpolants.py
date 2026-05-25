@@ -22,28 +22,29 @@ import os
 import sys
 import numpy as np
 import pickle
-from scipy.interpolate import interp2d
+from .._interp_compat import Interp2DLinear
 from typing import Dict, List, Optional, Tuple
 import warnings
 
 
 def _make_interp2d(time_grid, Z_values, data, kind='linear', fill_value=None):
-    """Wrapper around interp2d that handles the single-metallicity case.
+    """Build a linear 2-D (time, Z) interpolant, handling the single-metallicity case.
 
-    interp2d with kind='linear' (ky=1) requires at least 2 points in the
-    Z direction (my > ky).  When only one metallicity is requested we pad
-    with a duplicate row offset by a negligible epsilon so the constraint
-    is satisfied; the interpolant then returns identical values for any Z.
+    Returns an :class:`Interp2DLinear` (the future-proof, picklable replacement for the
+    removed ``scipy.interpolate.interp2d``; same ``(x=time, y=Z, z)`` layout and call
+    signature). A linear interpolant needs at least 2 points in the Z direction, so when
+    only one metallicity is requested we pad with a duplicate row offset by a negligible
+    epsilon; the interpolant then returns identical values for any Z. ``kind`` is accepted
+    for backward compatibility but only 'linear' is supported.
     """
+    if kind != 'linear':
+        raise ValueError(f"Interp2DLinear supports only kind='linear', got {kind!r}")
     Z_arr = list(Z_values)
     dat = np.asarray(data)
     if len(Z_arr) == 1:
         Z_arr = [Z_arr[0], Z_arr[0] + 1e-10]
         dat = np.vstack([dat, dat])
-    kwargs = {'kind': kind}
-    if fill_value is not None:
-        kwargs['fill_value'] = fill_value
-    return interp2d(time_grid, Z_arr, dat, **kwargs)
+    return Interp2DLinear(time_grid, Z_arr, dat, fill_value=fill_value)
 
 # Add pysb99 to path if needed
 sys.path.append(os.path.join(os.path.dirname(__file__), 'pysb99'))
