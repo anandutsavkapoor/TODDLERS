@@ -7,10 +7,19 @@ read by the downstream STAB build. A grid of thousands of models therefore runs 
 the cluster's *file-count* (inode) quota long before its byte quota.
 
 This utility walks each parameter directory, packs the non-essential files into a
-single per-directory ``output_archive.tar``, and removes the originals. The files the
-SED interpolant / STAB stage needs (``.in``, ``.out``, ``.cont``, ``.phy``, ``.rad``)
-are kept loose, so archiving is safe to run *before* the build. It is fully reversible
-with ``--untar``.
+single per-directory ``output_archive.tar``, and removes the originals. It is fully
+reversible with ``--untar``.
+
+Two modes select what counts as "essential" (kept loose):
+
+* **build-safe (default)** keeps every file the SED interpolant / STAB build reads
+  (continuum ``.cont``, nebular ``.diffContUnatt``, line ``.cum``/``.cumEmer``, overview
+  ``.ovr``, structure ``.phy``/``.rad``, plus ``.in``/``.out``), archiving only the pure
+  diagnostics (``.grAbund``, ``.grCont``, ``.grDGrat``, ``.grTemp``, ``.heat``, ``.cool``).
+  Safe to run *before* the build (no untar needed); this is what the campaign uses.
+* **``--aggressive`` (storage)** keeps only ``{.in,.out,.cont,.phy,.rad}`` and tars the
+  rest, for long-term storage of a grid ALREADY built into STABs. A later rebuild must
+  ``--untar`` first. Do not use it before a build.
 
 Cloudy run files are only archived once the model is confirmed successful
 (:meth:`CloudyOutputHandler.check_cloudy_success`), so a failed model's files stay in
@@ -18,12 +27,17 @@ place for inspection / resume.
 
 Run as a standalone pass over a whole ``cloudy_output`` tree::
 
-    python -m toddlers.hpc.archive_cloudy_output /path/to/cloudy_output            # archive
-    python -m toddlers.hpc.archive_cloudy_output /path/to/cloudy_output --dry-run  # preview
-    python -m toddlers.hpc.archive_cloudy_output /path/to/cloudy_output --untar     # restore
+    python -m toddlers.hpc.archive_cloudy_output /path/to/cloudy_output              # archive (build-safe)
+    python -m toddlers.hpc.archive_cloudy_output /path/to/cloudy_output --dry-run    # preview
+    python -m toddlers.hpc.archive_cloudy_output /path/to/cloudy_output --aggressive # storage (post-build)
+    python -m toddlers.hpc.archive_cloudy_output /path/to/cloudy_output --untar      # restore
 
-The campaign orchestrator (:mod:`toddlers.hpc.campaign`) invokes this automatically
-after the Cloudy grid is complete unless ``--no-archive-cloudy`` is passed.
+The campaign orchestrator (:mod:`toddlers.hpc.campaign`) invokes this (build-safe)
+automatically after the Cloudy grid is complete unless ``--no-archive-cloudy`` is passed.
+
+Note: the campaign step runs after the grid is complete, so it lowers the build-time and
+steady-state footprint, but not the transient inode peak *during* the Cloudy stage (all
+models exist before anything is archived). Size scratch for the full uncompressed grid.
 """
 
 import os
@@ -47,34 +61,46 @@ def setup_logging():
     return logging.getLogger('archiver')
 
 
+# Two essential-file policies, for the two ways the archiver is used.
+#
+# BUILD_SAFE (default): every file the SED interpolant + STAB build reads via
+# CloudyOutputHandler is kept loose, so archiving is safe to run *before* the build (as
+# the campaign does) without an untar:
+#   .cont          continuum the SED is built from           (get_continuum)
+#   .diffContUnatt unattenuated diffuse (nebular) continuum   (get_continuum, noDust/DTM)
+#   .cum/.cumEmer  cumulative line luminosities, HR STABs     (get_line_luminosities)
+#   .ovr           overview -> ionization structure           (get_ionization_structure)
+#   .phy           physical -> density/temperature structure  (get_density/temperature)
+#   .rad           radius -> radial structure                 (get_radial_structure)
+#   .in/.out       input + run log (reproduction, success check)
+# Only pure diagnostics (.grAbund, .grCont, .grDGrat, .grTemp, .heat, .cool, ...) get tarred.
+BUILD_SAFE_ESSENTIAL = {
+    '.in', '.out', '.ovr', '.cont', '.diffContUnatt',
+    '.cum', '.cumEmer', '.phy', '.rad',
+}
+
+# STORAGE (--aggressive): the minimal set to reproduce/inspect a run, for long-term storage
+# of a grid you have ALREADY turned into STABs. It strips the line, nebular, overview and
+# structure files too, so a later rebuild must `--untar` first. Do NOT use it before a build.
+STORAGE_ESSENTIAL = {'.in', '.out', '.cont', '.phy', '.rad'}
+
+
 class CloudyArchiver:
     """Archives non-essential Cloudy output files while preserving essential ones."""
 
-    def __init__(self, param_dir: Path):
+    def __init__(self, param_dir: Path, essential_extensions=None):
         """
         Initialize archiver for a parameter directory.
 
         Args:
             param_dir: Parameter set directory path
+            essential_extensions: set of extensions (with leading dot) to keep loose;
+                defaults to BUILD_SAFE_ESSENTIAL (safe to archive before the STAB build).
         """
         self.param_dir = Path(param_dir)
-
-        # Files the downstream SED interpolant + STAB build reads (CloudyOutputHandler):
-        #   .cont          continuum the SED is built from           (get_continuum)
-        #   .diffContUnatt unattenuated diffuse (nebular) continuum   (get_continuum, noDust/DTM)
-        #   .cum/.cumEmer  cumulative line luminosities, HR STABs     (get_line_luminosities)
-        #   .ovr           overview -> ionization structure           (get_ionization_structure)
-        #   .phy           physical -> density/temperature structure  (get_density/temperature)
-        #   .rad           radius -> radial structure                 (get_radial_structure)
-        #   .in/.out       input + run log (reproduction, success check)
-        # These MUST stay loose or the build silently loses lines / nebular continuum / structure.
-        # Only pure diagnostics (.grAbund, .grCont, .grDGrat, .grTemp, .heat, .cool, ...) are
-        # archived. NB: this is why the archiver is safe to run *before* the build; the legacy
-        # set ({.in,.out,.cont,.phy,.rad}) assumed archiving ran only *after* the STABs existed.
-        self.essential_extensions = {
-            '.in', '.out', '.ovr', '.cont', '.diffContUnatt',
-            '.cum', '.cumEmer', '.phy', '.rad',
-        }
+        self.essential_extensions = (
+            BUILD_SAFE_ESSENTIAL if essential_extensions is None else set(essential_extensions)
+        )
 
         # One archive per parameter directory.
         self.archive_path = self.param_dir / 'output_archive.tar'
@@ -240,8 +266,15 @@ def main(argv=None):
                         help="Show what would be done without doing it")
     parser.add_argument("--untar", action="store_true",
                         help="Extract files from archive back to their original locations")
+    parser.add_argument("--aggressive", action="store_true",
+                        help="Storage mode: also archive the line (.cum/.cumEmer), nebular "
+                             "(.diffContUnatt), overview (.ovr) and structure files, keeping "
+                             "only {.in,.out,.cont,.phy,.rad}. For long-term storage of a grid "
+                             "ALREADY built into STABs; a later rebuild must --untar first. Do "
+                             "NOT use before a build (default mode keeps all build-read files).")
 
     args = parser.parse_args(argv)
+    essential = STORAGE_ESSENTIAL if args.aggressive else BUILD_SAFE_ESSENTIAL
 
     logger = setup_logging()
     cloudy_output = Path(args.cloudy_output)
@@ -257,6 +290,10 @@ def main(argv=None):
         sys.exit(0)
 
     logger.info(f"Found {len(param_dirs)} parameter directories")
+    if not args.untar:
+        logger.info("Mode: %s (essential, kept loose: %s)",
+                    "AGGRESSIVE/storage" if args.aggressive else "build-safe",
+                    " ".join(sorted(essential)))
     if args.dry_run:
         logger.info("DRY RUN - no files will be modified")
 
@@ -264,7 +301,7 @@ def main(argv=None):
     total_archived = 0
     for param_dir in sorted(param_dirs):
         try:
-            archiver = CloudyArchiver(param_dir)
+            archiver = CloudyArchiver(param_dir, essential_extensions=essential)
             if args.untar:
                 archiver.untar()
             else:

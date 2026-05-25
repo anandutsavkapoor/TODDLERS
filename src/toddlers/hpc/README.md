@@ -166,17 +166,26 @@ is safe to run *before* the build (≈25% fewer files per directory). It is full
 reversible:
 
 ```bash
-python -m toddlers.hpc.archive_cloudy_output cloudy_output            # archive
-python -m toddlers.hpc.archive_cloudy_output cloudy_output --dry-run  # preview
-python -m toddlers.hpc.archive_cloudy_output cloudy_output --untar    # restore
+python -m toddlers.hpc.archive_cloudy_output cloudy_output              # archive (build-safe)
+python -m toddlers.hpc.archive_cloudy_output cloudy_output --dry-run    # preview
+python -m toddlers.hpc.archive_cloudy_output cloudy_output --aggressive # storage (post-build)
+python -m toddlers.hpc.archive_cloudy_output cloudy_output --untar      # restore
 ```
 
-The `campaign.py` orchestrator runs this automatically once the Cloudy grid is complete
-(after the resume gate, before the build); pass `--no-archive-cloudy` to keep all files
-loose. Only models confirmed successful are archived, so a failed model's files stay in
-place for inspection or resume. On shared **project** scratch, watch that the byte and
-inode budgets are co-tenant with other users' runs, and always point `cloudy_output` at
-scratch (not a small `$HOME`/`$DATA` quota).
+For **long-term storage** of a grid you have already turned into STABs, `--aggressive`
+also tars the line (`.cum`/`.cumEmer`), nebular (`.diffContUnatt`), overview and structure
+files, keeping only `{.in,.out,.cont,.phy,.rad}` (~50% fewer files). It is *not* safe
+before a build: `--untar` first if you rebuild from an aggressively-archived grid.
+
+The `campaign.py` orchestrator runs the build-safe mode automatically once the Cloudy
+grid is complete (after the resume gate, before the build); pass `--no-archive-cloudy` to
+keep all files loose. Only models confirmed successful are archived, so a failed model's
+files stay in place for inspection or resume. Note this step runs after the grid is
+complete, so it lowers the build-time and steady-state footprint but **not** the transient
+inode peak *during* the Cloudy stage (every model exists before anything is archived) —
+size scratch for the full uncompressed grid. On shared **project** scratch, watch that the
+byte and inode budgets are co-tenant with other users' runs, and always point
+`cloudy_output` at scratch (not a small `$HOME`/`$DATA` quota).
 
 ## Cluster gotchas (learned the hard way)
 
