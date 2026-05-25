@@ -58,14 +58,24 @@ class CloudyOutputHandler:
             return os.path.exists(input_file)
         return input_file.exists()
 
-    def check_cloudy_success(self, print_traceback=False):
+    def check_cloudy_success(self, print_traceback=False, validate_outputs=True):
         """
         Check if Cloudy run was successful by searching for 'Cloudy exited OK' near the end.
         Much faster than reading the entire file since success message is always at the end.
-        
+
+        When ``validate_outputs`` is True (default), a run that exited OK must ALSO have
+        produced usable save files: the essential outputs for its phase must exist, be
+        non-empty, and carry their ``#`` header line. This rejects truncated or
+        header-clobbered saves (e.g. a model that "exited OK" but whose ``save continuum``
+        wrote nothing, or whose ``.cum``/``.ovr`` header was blanked, when the disk filled
+        mid-write). Without this, such a model is treated as complete and is skipped by
+        both the resume logic and ``run_simulation``, and the STAB build silently consumes
+        empty continuum / line-less HR SEDs.
+
         Args:
             print_traceback (bool): Whether to print debug info if check fails
-            
+            validate_outputs (bool): Also require non-empty, header-valid essential outputs
+
         Returns:
             bool: True if run successful, False otherwise
         """
@@ -104,6 +114,12 @@ class CloudyOutputHandler:
                         print(f"{file_path} is not stable for {self.base_filename}")
                         return False
 
+            # Reject "exited OK" runs whose save files are empty or header-clobbered.
+            if success and validate_outputs and not self._outputs_valid():
+                if print_traceback:
+                    print(f"Essential output missing/empty/headerless for {self.base_filename}")
+                return False
+
             return success
 
         except Exception as e:
@@ -111,6 +127,41 @@ class CloudyOutputHandler:
                 print(f"Error checking success for {self.out_file}: {str(e)}")
                 traceback.print_exc()
             return False
+
+    def _outputs_valid(self):
+        """Essential save files exist, are non-empty, and have an intact first line.
+
+        The downstream SED interpolant + STAB build reads, per phase:
+          dissolved        -> .cont
+          shell / unified  -> .cont, .ovr, .phy, .rad, .cum, .cumEmer
+        A disk-full mid-write can leave a model that "exited OK" but with one of these
+        truncated to 0 bytes or with its first (header) row clobbered to NUL bytes (a file
+        hole) or whitespace; both make the build produce empty continuum / line-less HR
+        SEDs with no error. We strip NUL and whitespace from the first line and require
+        real content, plus a leading '#' for the files Cloudy gives a '#...' header
+        (.cont/.ovr/.phy/.cum/.cumEmer; the line readers and parsers need that header).
+        .rad can begin with a data row, so it is only required to be non-empty/intact.
+        """
+        if self.model_prefix == 'dissolved':
+            required = ('cont',)
+        else:
+            required = ('cont', 'ovr', 'phy', 'rad', 'cum', 'cumEmer')
+        hashed = {'cont', 'ovr', 'phy', 'cum', 'cumEmer'}
+        for ext in required:
+            path = self.get_file_path(ext)
+            try:
+                if os.path.getsize(path) == 0:
+                    return False
+                with open(path, 'r', errors='replace') as f:
+                    first_line = f.readline()
+            except OSError:
+                return False
+            cleaned = first_line.replace('\x00', '').strip()
+            if not cleaned:
+                return False
+            if ext in hashed and not cleaned.startswith('#'):
+                return False
+        return True
 
     def get_file_path(self, extension):
         return f"{self.base_filename}.{extension}"
@@ -406,11 +457,17 @@ class CloudyOutputHandler:
                 except (ValueError, IndexError):
                     continue
                     
+            if not line_lums:
+                raise ValueError(
+                    f"No line luminosities parsed from {file_path} (empty or "
+                    f"header-clobbered file?); refusing to return empty lines silently.")
             return line_lums
-            
+
         except Exception as e:
+            # Do NOT swallow: a missing or corrupt .cum/.cumEmer must fail loudly rather
+            # than return None and let the HR STAB build produce line-less SEDs silently.
             print(f"Error reading line luminosities from {file_path}: {str(e)}")
-            traceback.print_exc()
+            raise
 
     def _get_minimum_line_luminosities(self):
         """
