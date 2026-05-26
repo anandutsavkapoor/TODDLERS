@@ -20,8 +20,10 @@ Created: 2025
 
 import os
 import sys
+import json
 import numpy as np
 import pickle
+from datetime import datetime
 from .._interp_compat import Interp2DLinear
 from typing import Dict, List, Optional, Tuple
 import warnings
@@ -635,6 +637,42 @@ class PySB99InterpolantGenerator:
         print(f"To use with TODDLERS, ensure these files are in the database directory")
 
 
+def _save_population_metadata(generator, output_dir, imf_name, *, population_type,
+                              custom_star_numbers=None, imf_exponents=None,
+                              imf_mass_limits=None, time_start_myr=0.01,
+                              time_end_myr=31.0, time_step_myr=0.1):
+    """Write ``pySB99interpolation_<imf_name>_metadata.json`` next to the interpolant.
+
+    SpectralTableGenerator reads this JSON to recover the metallicities, spectral library
+    and population definition it needs to regenerate the incident spectra, so the
+    deterministic pySB99 -> Cloudy path works directly after interpolant generation (no
+    separate metadata step). Written without a rotation suffix to match how
+    SpectralTableGenerator resolves the file.
+    """
+    metadata = {
+        'population_name': imf_name,
+        'metallicities': list(generator.metallicities),
+        'Z_values': list(generator.Z_values),
+        'spectral_library': generator.spectral_library,
+        'rotation': generator.rotation,
+        'time_start_myr': time_start_myr,
+        'time_end_myr': time_end_myr,
+        'time_step_myr': time_step_myr,
+        'generation_date': datetime.now().isoformat(),
+        'population_type': population_type,
+    }
+    if population_type == 'custom':
+        metadata['custom_star_numbers'] = {str(m): n for m, n in custom_star_numbers.items()}
+    else:
+        metadata['imf_exponents'] = list(imf_exponents)
+        metadata['imf_mass_limits'] = list(imf_mass_limits)
+
+    path = os.path.join(output_dir, f'pySB99interpolation_{imf_name}_metadata.json')
+    with open(path, 'w') as f:
+        json.dump(metadata, f, indent=2)
+    return path
+
+
 def generate_kroupa_like_interpolants(
         imf_exponents: List[float] = [1.3, 2.3],
         imf_mass_limits: Tuple[float, ...] = (0.1, 0.5, 100.0),
@@ -696,7 +734,12 @@ def generate_kroupa_like_interpolants(
         imf_name=imf_name,
         overwrite=True
     )
-    
+
+    _save_population_metadata(generator, output_dir, imf_name, population_type='imf',
+                              imf_exponents=imf_exponents, imf_mass_limits=imf_mass_limits,
+                              time_start_myr=time_start_myr, time_end_myr=time_end_myr,
+                              time_step_myr=time_step_myr)
+
     return generator
 
 
@@ -746,13 +789,18 @@ def generate_custom_population_interpolants(
         custom_star_numbers=custom_star_numbers,
         verbose=verbose
     )
-    
+
     generator.save_interpolants(
         output_dir=output_dir,
         imf_name=imf_name,
         overwrite=True
     )
-    
+
+    _save_population_metadata(generator, output_dir, imf_name, population_type='custom',
+                              custom_star_numbers=custom_star_numbers,
+                              time_start_myr=time_start_myr, time_end_myr=time_end_myr,
+                              time_step_myr=time_step_myr)
+
     return generator
 
 

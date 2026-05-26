@@ -25,15 +25,6 @@ references:
     authors:
       - family-names: Kapoor
         given-names: Anand Utsav
-        orcid: https://orcid.org/0000-0002-5187-1725
-    title: "TODDLERS 2.0: Stellar feedback and observables across diverse IMFs, binary populations, and cloud environments"
-    journal: "Astronomy & Astrophysics"
-    year: 2025
-    doi: "XX.XXXX/XXXXXXXX"  # update on publication
-  - type: article
-    authors:
-      - family-names: Kapoor
-        given-names: Anand Utsav
     title: "TODDLERS: A new UV-millimeter emission library for star-forming regions. I. Integration with SKIRT and public release"
     journal: "Monthly Notices of the Royal Astronomical Society"
     year: 2023

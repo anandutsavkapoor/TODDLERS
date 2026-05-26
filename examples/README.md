@@ -15,6 +15,9 @@ Each script demonstrates one capability and runs standalone. Run from anywhere a
 | `08_dynamic_density_and_covering.py` | dynamic cloud density + variable covering fraction | feedback data |
 | `09_stochastic_pipeline.py` | discrete population -> feedback interpolants | stellar database |
 | `10_fast_feedback_queries.py` | fast precomputed queries (MCMC-style repeated evaluation) | feedback data |
+| `11_bpt_diagram.py` | local end-to-end BPT track(s): evolution -> full Cloudy time series -> [O III]/Hβ vs [N II]/Hα for one or more runs | feedback data + Cloudy |
+| `12_custom_population_pipeline.py` | full chain for a **custom** population: synthesise its feedback interpolants + Cloudy SED table -> evolution -> Cloudy | feedback data (+ Cloudy for `--run-cloudy`) |
+| `13_stochastic_population_pipeline.py` | full chain for a **stochastically sampled** population: sample -> interpolants + Cloudy SED table -> evolution -> Cloudy | stellar database (+ Cloudy for `--run-cloudy`) |
 
 **Data:** scripts marked "feedback data" / "stellar database" need the downloaded/built
 libraries (`python scripts/download_data.py`). The Cloudy example additionally needs
@@ -32,7 +35,6 @@ Beyond the numbered scripts, this directory has:
 | `paper_figures/` | regenerate every figure in the TODDLERS 2.0 paper (`generate_all_paper_figures.py --fig ...`) — see its README |
 | `stab/` | build SKIRT `.stab` SED libraries (cloud-family + SFR-normalized) from evolution+Cloudy output |
 | `eep_validation/` | validation/diagnostic scripts for the EEP (phase-aligned) mass interpolation used by the stochastic sampler — see its README |
-| `analysis/` | post-processing utilities (e.g. `plot_bpt_single_run.py`) |
 
 For running the two expensive stages (evolution grids, Cloudy post-processing) on a SLURM
 cluster, see `hpc/` here and `src/toddlers/hpc/README.md`.

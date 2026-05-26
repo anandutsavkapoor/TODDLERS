@@ -1,5 +1,23 @@
 # Running a STAB campaign on a SLURM cluster
 
+## Do you even need this?
+
+Most users do **not** run their own grids:
+
+- **Use the precomputed STAB libraries** (in SKIRT, or for MCMC fitting): pure table lookup,
+  no Cloudy and no cluster — nothing here applies.
+- **Run a handful of bespoke regions**: one workstation is enough. See the local examples
+  (`examples/04_cloudy_pipeline.py`, `examples/11_bpt_diagram.py`), which call
+  `Evolution().run_simulation()` then `CloudySimulationManager(...).run_full_simulation()`.
+  No scheduler.
+- **Generate a new large grid** (new IMF/template/parameter range): this is the only case
+  you need the pipeline below. SLURM is the common case; the worker pool itself is
+  scheduler-agnostic (only the submit templates are SLURM-specific, see
+  `src/toddlers/hpc/README.md`), so PBS/SGE/LSF/cloud users reuse it with their own
+  one-line launcher.
+
+## The driver
+
 `toddlers.hpc.campaign` is the one packaged driver for the complete TODDLERS → SKIRT STAB
 workflow on any SLURM cluster:
 
@@ -26,6 +44,19 @@ first: it prints every `generate_tasks` / `sbatch` command and submits nothing.
 
 DIG is off by default (the paper's variable-DTM grid has none). The Cloudy time grid
 defaults to `toddlers_v1`, which the SED interpolant requires.
+
+### The two campaigns behind the paper
+
+Both are the *same* driver; they map onto the two recipes below:
+
+1. **Production grid, from scratch** (e.g. the BPASS chab100 binary grid): generate the grid
+   and run evolution → Cloudy → STAB in one dependent chain — see **From scratch** below.
+   The grid axes live in `toddlers.stab.config` per template, so regenerate the grid JSON
+   with `make_grid.py` (it reads those axes) rather than hand-editing.
+2. **Variable-DTM 5D library**: start from the already-computed evolution and sweep DTM at
+   the Cloudy stage, scaled across nodes — see **From existing evolution runs** + **Large
+   workloads** below. This is the campaign that builds the paper's DTM-axis SFR-normalised
+   STAB.
 
 ## From scratch (run evolution too)
 
