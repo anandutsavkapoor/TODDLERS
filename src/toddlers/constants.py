@@ -67,7 +67,8 @@ else:  # Linux
 RTOL_MAIN_PH1  = 1e-6  # Relative tolerance for main solver, phase-1
 RTOL_MAIN_FRAG = 1e-6  # Relative tolerance for main solver, fragmentation
 RTOL_MAIN_PH2  = 1e-5  # Relative tolerance for main solver, phase-2
-SIMULATION_TIMEOUT = 3600 * 2 # 2 hours in seconds
+SIMULATION_TIMEOUT = 3600 * 2 # 2 hours in seconds (absolute backstop per attempt)
+STALL_TIMEOUT = 60 * 45 # escalate an attempt if its log stops growing for 45 min
 LOOSER_RTOL = RTOL_MAIN_PH1  * 1.25  # Looser relative tolerance for third attempt
 MAX_STEP_PH1  = 3e-3*MYR_TO_SEC # max step allowed, phase-1
 MAX_STEP_FRAG = 3e-3*MYR_TO_SEC # max step allowed, fragmentation

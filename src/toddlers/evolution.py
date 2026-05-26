@@ -1,4 +1,4 @@
-from .timeout_manager import TimeoutManager
+from .timeout_manager import TimeoutManager, LogStallWatchdog
 from .imports import np, solve_ivp, interp1d, brentq, sys, os, contextmanager, warnings, traceback, pickle
 from .constants import *
 from .exceptions import ManualEventTermination, capture_output
@@ -714,7 +714,13 @@ class Evolution:
         1. Standard parameters (default solvers, standard rtol)
         2. Alternative solvers (standard rtol)
         3. Original solvers with looser tolerance (default solvers, looser rtol)
-        
+
+        Each attempt is guarded by a :class:`LogStallWatchdog`, which escalates to the next
+        attempt when EITHER the run's log stops growing for ``STALL_TIMEOUT`` (a genuinely
+        stuck integration) OR the absolute ``SIMULATION_TIMEOUT`` backstop is reached. The
+        stall check means a slow-but-progressing run is not killed before the backstop; when
+        there is no log file (null logger) only the flat ``SIMULATION_TIMEOUT`` cap applies.
+
         Returns:
             list: Simulation results
             
@@ -752,7 +758,12 @@ class Evolution:
                 )
                 
                 try:
-                    with TimeoutManager(SIMULATION_TIMEOUT):
+                    # Escalate an attempt when its log stops growing (genuinely stuck),
+                    # not after a flat wall-clock cap: a slow-but-progressing run is left
+                    # to finish. SIMULATION_TIMEOUT is the absolute backstop, and the sole
+                    # trigger when there is no log file (null logger).
+                    with LogStallWatchdog(getattr(self.logger, "log_filepath", None),
+                                          STALL_TIMEOUT, hard_cap=SIMULATION_TIMEOUT):
                         results = self.simulation_attempt(solvers, rtol)
                         self.logger.info(f"Attempt {attempt} succeeded")
                         self.logger.log_total_time()
@@ -760,8 +771,8 @@ class Evolution:
                         self.logger.close()
                         return results
                         
-                except TimeoutError:
-                    self.logger.warning(f"Attempt {attempt} timed out after {SIMULATION_TIMEOUT} seconds")
+                except TimeoutError as exc:
+                    self.logger.warning(f"Attempt {attempt} aborted by watchdog: {exc}")
                 except Exception as e:
                     tb_str = traceback.format_exc()
                     self.logger.warning(f"Attempt {attempt} failed with error: {str(e)}\n{tb_str}")

@@ -224,3 +224,13 @@ byte and inode budgets are co-tenant with other users' runs, and always point
   binary wrote the file, so output from an *older* `cloudy.exe` is silently reused. If a
   result looks "very strange," check the output mtime against the `cloudy.exe` build time
   before debugging anything else.
+- **Evolution attempts have a log-stall watchdog on top of the absolute cap.** An attempt
+  can occasionally park its ODE solver in a phase making little or no progress. Each
+  evolution attempt is watched by a `LogStallWatchdog` that escalates
+  to the next attempt (alternative solver, then looser tolerance) when **either** the log
+  stops growing for `STALL_TIMEOUT` (45 min) **or** the absolute `SIMULATION_TIMEOUT` (2 h)
+  backstop is reached. So a genuinely stuck run is caught well before the 2 h cap, while a
+  slow-but-progressing run keeps going (up to that cap). If there is no log to watch (null
+  logger) only the flat cap applies. This pairs with the platform-split phase-2 solver in
+  `constants.py` (`LSODA` on Linux, `BDF` on macOS): if a combo stalls in `LSODA`, the
+  watchdog escalates to the `BDF` alternative rather than burning the whole walltime.
