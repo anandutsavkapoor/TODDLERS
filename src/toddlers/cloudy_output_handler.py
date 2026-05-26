@@ -53,10 +53,12 @@ class CloudyOutputHandler:
         that every phase's input carries (it is the one save common to all of them,
         including the dissolved phase). This rejects two mid-write truncation modes that
         otherwise never self-heal because the file is non-empty:
-          * 0-byte input (disk-full mid-write) -> Cloudy "No incident radiation field".
-          * a few-line stub from a worker killed at walltime during input generation
-            (title + ``table star`` + ``luminosity`` only, no density law / inner radius)
-            -> Cloudy "Hydrogen density MUST be specified" / inner radius not set.
+
+        * 0-byte input (disk-full mid-write): Cloudy "No incident radiation field".
+        * a few-line stub from a worker killed at walltime during input generation
+          (title + ``table star`` + ``luminosity`` only, no density law / inner radius):
+          Cloudy "Hydrogen density MUST be specified" / inner radius not set.
+
         Either way the caller regenerates the input rather than handing Cloudy a file it
         cannot run. The ``.in`` is a few KB, so reading it here is cheap.
 
