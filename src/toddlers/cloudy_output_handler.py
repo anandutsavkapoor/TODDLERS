@@ -47,17 +47,28 @@ class CloudyOutputHandler:
 
     def check_input_exists(self):
         """
-        Check if a usable input file exists for this model and time.
+        Check if a COMPLETE input file exists for this model and time.
 
-        Returns True only for a NON-EMPTY .in: a 0-byte input (e.g. truncated by a
-        disk-full mid-write) counts as missing so the caller regenerates it, rather than
-        handing Cloudy an empty file (which fails with "No incident radiation field").
+        Beyond being non-empty, the .in must contain the ``save last continuum`` command
+        that every phase's input carries (it is the one save common to all of them,
+        including the dissolved phase). This rejects two mid-write truncation modes that
+        otherwise never self-heal because the file is non-empty:
+          * 0-byte input (disk-full mid-write) -> Cloudy "No incident radiation field".
+          * a few-line stub from a worker killed at walltime during input generation
+            (title + ``table star`` + ``luminosity`` only, no density law / inner radius)
+            -> Cloudy "Hydrogen density MUST be specified" / inner radius not set.
+        Either way the caller regenerates the input rather than handing Cloudy a file it
+        cannot run. The ``.in`` is a few KB, so reading it here is cheap.
 
         Returns:
-            bool: True if a non-empty input file exists, False otherwise
+            bool: True if a complete input file exists, False otherwise
         """
         try:
-            return os.path.getsize(self.get_file_path("in")) > 0
+            path = self.get_file_path("in")
+            if os.path.getsize(path) == 0:
+                return False
+            with open(path, errors="ignore") as f:
+                return "save last continuum" in f.read()
         except OSError:
             return False
 
