@@ -213,3 +213,14 @@ byte and inode budgets are co-tenant with other users' runs, and always point
   an idle login node (cache/bandwidth contention). Size production batches from a
   short on-cluster run, reading the per-worker `[wNN] DONE: N tasks in Ts` lines.
 - Clear stale `__pycache__` after updating code on the cluster.
+- **A `[patch-check]` line warns if `cloudy.exe` lacks the unattenuated-continuum patch.**
+  The patch (`cloudy_patches/`) is optional; without it Cloudy writes no `.diffContUnatt`,
+  so the noDust / variable-DTM SEDs fall back to the standard attenuated diffuse continuum.
+  Each worker notes this once (greppable as `[patch-check]`) if the patch is absent, so you
+  know which behaviour a grid was built with. No warning means the patch is present.
+- **After rebuilding or re-patching `cloudy.exe`, clear (or force-regenerate) the
+  affected `cloudy_output`.** The "already run, skipping" guard (`check_cloudy_success`)
+  only checks that a model's `.out` says "Cloudy exited OK"; it does **not** track which
+  binary wrote the file, so output from an *older* `cloudy.exe` is silently reused. If a
+  result looks "very strange," check the output mtime against the `cloudy.exe` build time
+  before debugging anything else.

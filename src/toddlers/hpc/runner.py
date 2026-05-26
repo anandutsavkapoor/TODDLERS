@@ -58,6 +58,12 @@ def run_evolution_task(row: dict):
 # Cloudy work unit
 # ---------------------------------------------------------------------------
 
+# Set once per worker process, the first time a Cloudy model that requests the
+# unattenuated nebular continuum completes, so the worker log states up front whether
+# the binary carries the cloudy_patches/ patch (see the [patch-check] block below).
+_PATCH_CHECK_LOGGED = False
+
+
 @contextmanager
 def _in_dir(path):
     """chdir into ``path`` for the duration, always restoring the old cwd.
@@ -194,6 +200,25 @@ def run_cloudy_task(row: dict, cloudy_exe: str = None):
             raise RuntimeError(
                 f"{phase}@{time / MYR_TO_SEC:.3f}Myr exited OK but produced invalid or "
                 f"empty output (truncated save / disk full?)")
+
+        # One-time per worker: warn if this cloudy.exe lacks the unattenuated-continuum
+        # patch (cloudy_patches/). The shell/unified/dissolved inputs all request
+        # `save diffuse continuum unattenuated`; a patched binary writes a non-empty
+        # .diffContUnatt, an unpatched one writes nothing there and does NOT error.
+        # _outputs_valid() above does not require that file, so an unpatched binary
+        # "exits OK" yet produces no unattenuated nebular continuum. The patch is
+        # optional, so this is a one-time note (greppable as "[patch-check]"), not a
+        # failure: without it the noDust / variable-DTM SEDs fall back to the standard
+        # attenuated diffuse continuum.
+        global _PATCH_CHECK_LOGGED
+        if not _PATCH_CHECK_LOGGED and phase in ("shell", "unified", "dissolved"):
+            _PATCH_CHECK_LOGGED = True
+            neb_path = output_handler.get_file_path("diffContUnatt")
+            if not (os.path.exists(neb_path) and os.path.getsize(neb_path) > 0):
+                exe = cloudy_exe or "cloudy.exe"
+                print(f"[patch-check] {exe} has no unattenuated-continuum patch "
+                      f"(cloudy_patches/): no .diffContUnatt written, so noDust / "
+                      f"variable-DTM SEDs fall back to the attenuated diffuse continuum.")
 
     info = f"{phase}@{time / MYR_TO_SEC:.3f}Myr"
     if repairs:
