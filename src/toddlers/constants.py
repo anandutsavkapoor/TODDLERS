@@ -45,7 +45,7 @@ ION_TO_LYALPHA = 0.68  # Conversion factor from ionizing photons to Lyman-alpha
 T_SN = 3.0 * MYR_TO_SEC  # Time of first supernova explosion
 
 # Cloud and shell properties
-DISSOLUTION_DENSITY = 0.5  # Density threshold for shell dissolution in cm^-3
+DISSOLUTION_DENSITY = 1.0  # Density threshold for shell dissolution in cm^-3
 DISSOLUTION_PERIOD = 1 * MYR_TO_SEC  # Time period for dissolution condition in seconds
 DISSOLUTION_RADIUS = 1000 * PC_TO_CM  # Radius threshold for dissolution in cm
 
