@@ -3,6 +3,10 @@ import sys, os
 import pickle
 from pathlib import Path
 import matplotlib.pyplot as plt
+import pytest
+
+# Needs generated dissolution interpolant data; deselected by the default (fast) test run.
+pytestmark = pytest.mark.data
 # Add project root to Python path
 project_root = Path(__file__).resolve().parents[1] / "src"  # repo src/ for the editable package
 sys.path.append(str(project_root))

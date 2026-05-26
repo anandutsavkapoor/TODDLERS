@@ -4,6 +4,10 @@ from scipy.interpolate import interp1d
 from pathlib import Path
 from matplotlib.gridspec import GridSpec
 import sys, os
+import pytest
+
+# Needs generated Cloudy SED output; deselected by the default (fast) test run.
+pytestmark = pytest.mark.data
 sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src"))  # repo src/
 from toddlers.cloudy_output_handler import CloudyOutputHandler
 from toddlers.stab.line_profiles import LineProfileGenerator

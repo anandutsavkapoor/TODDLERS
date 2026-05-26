@@ -13,8 +13,13 @@ import h5py
 import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
-import seaborn as sns
+import pytest
+sns = pytest.importorskip("seaborn")  # diagnostic plots only; skip module if seaborn absent
 from matplotlib.gridspec import GridSpec
+
+# Analyses a generated recollapse_data HDF5; needs that data, so it is part of the
+# 'data' set and is deselected by the default (fast) test run.
+pytestmark = pytest.mark.data
 
 def validate_hdf5_structure(h5file):
     """

@@ -3,8 +3,12 @@ import matplotlib.pyplot as plt
 import os
 import warnings
 from pathlib import Path
+import pytest
 from toddlers.stab import recollapse as TORCH
 from toddlers.stab.config import *
+
+# Needs the generated recollapse HDF5 data; deselected by the default (fast) test run.
+pytestmark = pytest.mark.data
 
 def test_star_formation_simulation():
     """Test StarFormationSimulation following the established plotting pattern."""
