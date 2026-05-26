@@ -47,16 +47,19 @@ class CloudyOutputHandler:
 
     def check_input_exists(self):
         """
-        Check if an input file exists for this model and time.
-        Works with both Path objects and string file paths.
-                
+        Check if a usable input file exists for this model and time.
+
+        Returns True only for a NON-EMPTY .in: a 0-byte input (e.g. truncated by a
+        disk-full mid-write) counts as missing so the caller regenerates it, rather than
+        handing Cloudy an empty file (which fails with "No incident radiation field").
+
         Returns:
-            bool: True if input file exists, False otherwise
+            bool: True if a non-empty input file exists, False otherwise
         """
-        input_file = self.get_file_path("in")
-        if isinstance(input_file, str):
-            return os.path.exists(input_file)
-        return input_file.exists()
+        try:
+            return os.path.getsize(self.get_file_path("in")) > 0
+        except OSError:
+            return False
 
     def check_cloudy_success(self, print_traceback=False, validate_outputs=True):
         """
