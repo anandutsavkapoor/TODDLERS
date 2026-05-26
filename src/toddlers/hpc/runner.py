@@ -126,6 +126,24 @@ def run_cloudy_task(row: dict, cloudy_exe: str = None):
     with _in_dir(sim_manager.cloudy_run_dir):
         output_handler = CloudyOutputHandler(phase, time, parse_data=False)
         input_exists = output_handler.check_input_exists()
+        in_path = output_handler.get_file_path("in")
+        out_path = output_handler.get_file_path("out")
+
+        # Operational diagnostics: note when we are self-healing a previously broken
+        # on-disk state (truncated input / invalid prior output, e.g. from a disk-full
+        # mid-write) so a run's logs reveal infrastructure problems instead of hiding them
+        # behind a silent re-run. No physics change (regenerated input is deterministic) --
+        # distinct from "[repair]", which alters the model. Greppable as "[self-heal]".
+        # The prior-output check only does I/O when a .out already exists (i.e. a re-run /
+        # resume), so a clean first pass pays nothing.
+        heal = []
+        if not input_exists and os.path.exists(in_path):
+            heal.append("empty/truncated input")
+        if os.path.exists(out_path) and not output_handler.check_cloudy_success():
+            heal.append("invalid prior output")
+        if heal:
+            print(f"[self-heal] {phase}@{time / MYR_TO_SEC:.2f}Myr: {', '.join(heal)} "
+                  f"-> regenerating/re-running")
 
         if not input_exists or force_regenerate:
             if phase in ("shell", "unified", "dissolved"):
@@ -139,8 +157,6 @@ def run_cloudy_task(row: dict, cloudy_exe: str = None):
         # Run, with bounded retry-and-repair for recognised Cloudy failures.
         auto_repair = bool(row.get("auto_repair", True))
         max_attempts = int(row.get("max_repair_attempts", 2))
-        in_path = output_handler.get_file_path("in")
-        out_path = output_handler.get_file_path("out")
         classifier, modifier = CloudyErrorClassifier(), CloudyInputModifier()
 
         attempt = 0
