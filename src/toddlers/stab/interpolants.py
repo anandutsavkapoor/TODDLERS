@@ -311,8 +311,19 @@ class DataManager:
         )
 
     def _get_cache_path(self, Z, eta_sf, n_cl, logM):
-        """Generate cache file path for specific parameters."""
+        """Generate cache file path for specific parameters.
+
+        The dust-to-metal scaling is part of the key: a DTM sweep runs one
+        ``interpolants`` invocation per DTM, all sharing this cache dir, and each
+        DTM reads a different set of Cloudy output (the ``_dtmX.XX`` dirs). Without
+        DTM in the key the first DTM's cache entry is reused for every later DTM, so
+        all per-DTM interpolants come out identical (the DTM axis is degenerate).
+        DTM=1.0 carries no suffix, matching the no-suffix baseline Cloudy dirs.
+        """
+        dtm = getattr(self.generator, "dust_to_metal", 1.0)
         param_str = f"Z{Z:.3g}_eta{eta_sf:.3g}_n{n_cl:.1f}_logM{logM:.2f}"
+        if dtm != 1.0:
+            param_str += f"_dtm{dtm:.2f}"
         return self.cache_dir / f"{param_str}.pkl"
 
     def _load_cache_entry(self, cache_path, params, data_keys=None):

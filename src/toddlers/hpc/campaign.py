@@ -323,11 +323,15 @@ def _submit_postprocess(args, taskdir, after_jobs):
         f"cd {args.stab_dir}",
         'PREFIX="$(python3 -c \'from toddlers.stab import config; print(config.MODEL_PREFIX)\')"',
         "mkdir -p hdf5",
-        # The selective cache is keyed only on (Z, eta, n, logM) with no data-version check,
-        # so a cache written by an earlier Cloudy run would mask the freshly generated output
-        # (e.g. continuum-only models lacking line data). The campaign always (re)generates the
-        # Cloudy output immediately upstream of this stage, so clear the cache before building.
-        'echo "=== clearing stale interpolant cache ==="; rm -f cache/*.pkl cache/*.tmp',
+        # The selective interpolant cache (keyed on Z,eta,n,logM,DTM) has no data-version
+        # check, so a cache written by an earlier Cloudy run would mask the freshly generated
+        # output. It lives in the PACKAGE dir (toddlers/stab/cache), not the cwd, so clear it
+        # by its real path -- a bare "rm cache/*" in stab_dir clears the wrong (empty) dir and
+        # leaves the stale package cache in place. The campaign always (re)generates the Cloudy
+        # output immediately upstream, so wiping the cache here is safe.
+        'echo "=== clearing stale interpolant cache ==="',
+        'CACHE_DIR="$(python3 -c \'from pathlib import Path; import toddlers.stab.interpolants as m; print(Path(m.__file__).parent / "cache")\')"',
+        'echo "  cache dir: $CACHE_DIR"; rm -f "$CACHE_DIR"/*.pkl "$CACHE_DIR"/*.tmp cache/*.pkl cache/*.tmp 2>/dev/null || true',
     ]
     # One interpolant build per DTM (the .pkl carry a _dtm<val> suffix, so they coexist).
     # The interpolant stage runs after `cd {stab_dir}`, so the evolution dir must be absolute
