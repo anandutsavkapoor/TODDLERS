@@ -351,21 +351,27 @@ def _submit_postprocess(args, taskdir, after_jobs):
         # also drops any stale cache from an earlier Cloudy run that could mask fresh output.
         'CACHE_DIR="$(python3 -c \'from pathlib import Path; import toddlers.stab.interpolants as m; print(Path(m.__file__).parent / "cache")\')"',
         'echo "  interpolant cache dir: $CACHE_DIR"',
+        # --keep-interp-cache: retain every DTM's cache (for debugging), but still drop any
+        # cross-run stale cache once on a fresh build so the kept data is from THIS run.
+        ('if [ "$BUILD_ROUND" -eq 0 ]; then echo "  [keep-interp-cache] clearing cross-run stale cache once"; '
+         'rm -f "$CACHE_DIR"/*.pkl "$CACHE_DIR"/*.tmp 2>/dev/null || true; fi'
+         if args.keep_interp_cache else ""),
     ]
     # One interpolant build per DTM (the .pkl carry a _dtm<val> suffix, so they coexist).
     # The interpolant stage runs after `cd {stab_dir}`, so the evolution dir must be absolute
     # (it is relative to the repo root where the campaign is invoked / the job's WorkDir).
     evo_dir_abs = os.path.abspath(args.evolution_dir)
     for dtm in dtms:
-        lines += [
-            f'echo "=== interpolant for DTM={dtm} ==="',
+        block = [f'echo "=== interpolant for DTM={dtm} ==="']
+        if not args.keep_interp_cache:
             # Bound the cache to one DTM: clear before each build (the previous DTM's pkls are
             # already saved, so its cache is dead weight; a resume skips done DTMs via
             # interpolant_exists). Keeps the data-partition footprint flat across a DTM sweep.
-            'rm -f "$CACHE_DIR"/*.pkl "$CACHE_DIR"/*.tmp 2>/dev/null || true',
+            block.append('rm -f "$CACHE_DIR"/*.pkl "$CACHE_DIR"/*.tmp 2>/dev/null || true')
+        block.append(
             f"python3 -m toddlers.stab.interpolants --evolution-dir {evo_dir_abs} "
-            f"--output-dir ${{PREFIX}}_interp_tables --dust-to-metal {dtm}",
-        ]
+            f"--output-dir ${{PREFIX}}_interp_tables --dust-to-metal {dtm}")
+        lines += block
     # Recollapse data is DTM-independent; SFR-norm reads hdf5/recollapse_data_<PREFIX>.hdf5.
     lines.append("cp ${PREFIX}_interp_tables/recollapse_data.h5 hdf5/recollapse_data_${PREFIX}.hdf5")
     if args.stab in ("both", "cloud"):
@@ -447,6 +453,8 @@ def _stage2_argv(args, leaf):
         a += ["--no-continue-after-dissolution"]
     if not args.archive_cloudy:
         a += ["--no-archive-cloudy"]
+    if args.keep_interp_cache:
+        a += ["--keep-interp-cache"]
     return a
 
 
@@ -508,6 +516,12 @@ def main(argv=None):
                    help="how many times the post-process resume-gate will resubmit unfinished "
                         "Cloudy tasks (failed or timed-out) before building anyway. Guards "
                         "against a persistently-failing model looping forever.")
+    p.add_argument("--keep-interp-cache", action="store_true",
+                   help="keep the per-DTM interpolant cache (toddlers/stab/cache, ~5 GB/DTM of "
+                        "parsed Cloudy data) instead of clearing it before each DTM build. Off "
+                        "by default: a DTM sweep keeps only one DTM's cache at a time, else the "
+                        "caches accumulate and can exceed the data-partition quota. Turn on to "
+                        "inspect the cached parsed-Cloudy data when debugging (needs the disk).")
 
     # cluster parameters
     p.add_argument("--account", required=True)
