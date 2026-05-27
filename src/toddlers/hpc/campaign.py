@@ -524,14 +524,15 @@ def main(argv=None):
                         "Cloudy tasks (failed or timed-out) before building anyway. Guards "
                         "against a persistently-failing model looping forever.")
     p.add_argument("--keep-interp-cache", action="store_true",
-                   help="keep the per-DTM interpolant cache (toddlers/stab/cache, ~5 GB/DTM of "
-                        "parsed Cloudy data) instead of clearing it before each DTM build. Off "
-                        "by default: a DTM sweep keeps only one DTM's cache at a time, else the "
-                        "caches accumulate and can exceed the data-partition quota. Turn on to "
-                        "inspect the cached parsed-Cloudy data when debugging (needs the disk).")
+                   help="keep the per-DTM interpolant cache (toddlers/stab/cache; parsed Cloudy "
+                        "data, size scales with the grid) instead of clearing it before each DTM "
+                        "build. Off by default: a DTM sweep keeps only one DTM's cache at a time, "
+                        "else the caches accumulate per DTM and can exceed the data-partition "
+                        "quota. Turn on to inspect the cached parsed-Cloudy data when debugging "
+                        "(needs the disk).")
     p.add_argument("--cache-dir", default="",
-                   help="directory for the interpolant build cache (the large transient parsed "
-                        "Cloudy data, a few GB per DTM). Default: the package dir "
+                   help="directory for the interpolant build cache (a large transient of parsed "
+                        "Cloudy data whose size scales with the grid). Default: the package dir "
                         "(toddlers/stab/cache) on the code filesystem. Point it at SCRATCH for "
                         "large DTM sweeps so the cache does not consume the home/data-partition "
                         "quota (sets TODDLERS_INTERP_CACHE for the build).")

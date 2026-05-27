@@ -188,9 +188,10 @@ byte and inode budgets are co-tenant with other users' runs, and always point
 `cloudy_output` at scratch (not a small `$HOME`/`$DATA` quota).
 
 The STAB build (interpolant stage) has a *second* large transient besides `cloudy_output`:
-a parsed-Cloudy **interpolant cache**, ~5 GB **per DTM**. It defaults to the package dir
-(`toddlers/stab/cache`), which on many clusters sits on the small `$HOME`/`$DATA` quota, so a
-DTM sweep that accumulated every DTM's cache there would blow the quota mid-build. Two
+a parsed-Cloudy **interpolant cache** whose size **scales with the grid** (one entry per
+cloud, accumulating per DTM). It defaults to the package dir (`toddlers/stab/cache`), which
+on many clusters sits on the small `$HOME`/`$DATA` quota, so a DTM sweep that accumulated
+every DTM's cache there can blow the quota mid-build (this bit the paper's variable-DTM run). Two
 safeguards (both in `campaign.py`): the cache is **cleared per DTM by default** (only one
 DTM's worth on disk at a time — a resume skips finished DTMs via the saved interpolant
 `.pkl`, not the cache), and **`--cache-dir <scratch>`** (env `TODDLERS_INTERP_CACHE`)

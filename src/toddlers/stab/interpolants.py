@@ -296,10 +296,11 @@ class DataManager:
         self.generator = generator
         self.cached_data = {}
         
-        # Interpolant build cache. This is a large transient (the parsed Cloudy output, a few
-        # GB per DTM), so the TODDLERS_INTERP_CACHE env var lets it live on scratch instead of
-        # the (often quota-limited) code/home filesystem -- important for large DTM sweeps on a
-        # cluster. Default is the package dir, fine for casual single runs.
+        # Interpolant build cache. This is a large transient (the parsed Cloudy output; its
+        # size scales with the grid -- one entry per cloud), so the TODDLERS_INTERP_CACHE env
+        # var lets it live on scratch instead of the (often quota-limited) code/home filesystem
+        # -- important for large DTM sweeps on a cluster. Default is the package dir, fine for
+        # casual single runs.
         cache_env = os.environ.get("TODDLERS_INTERP_CACHE")
         self.cache_dir = Path(cache_env) if cache_env else (Path(__file__).resolve().parent / "cache")
         self.cache_dir.mkdir(parents=True, exist_ok=True)
