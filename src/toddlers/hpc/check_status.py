@@ -15,28 +15,52 @@ Usage::
 """
 import argparse
 import glob
+import hashlib
 import sys
 from pathlib import Path
 
 
+def task_key(raw_line):
+    """Stable content hash of a task line, independent of its position in the file.
+
+    A resume task file is written as byte-identical copies of the original task lines
+    (just a re-numbered subset), so a *content* key matches a result back to its task
+    across rounds even though line indices restart at 0 in every resume file. Matching
+    on the line index instead is the historic miscount: a resume round records "OK at
+    index k" against the resume file, the gate then aggregates it against the original
+    file, and index k there is a different task -- so already-done (skipped) tasks were
+    never credited and got re-listed every round until the retry guard fired.
+    """
+    return hashlib.sha1(raw_line.strip().encode()).hexdigest()[:16]
+
+
 def parse_results(results_paths):
-    """Return (ok_indices, fail_indices) read from one or more results files."""
-    ok, fail = set(), set()
+    """Aggregate worker results files.
+
+    Returns ``(ok_keys, fail_keys, ok_idx, fail_idx)``. Current workers write
+    ``idx<TAB>STATUS<TAB>KEY<TAB>info`` (4+ fields) and are matched by content KEY;
+    legacy 3-field ``idx<TAB>STATUS[<TAB>info]`` lines fall back to index matching so
+    old results files still parse.
+    """
+    ok_keys, fail_keys, ok_idx, fail_idx = set(), set(), set(), set()
     for path in results_paths:
         with open(path) as f:
             for line in f:
                 parts = line.rstrip("\n").split("\t")
                 if len(parts) < 2:
                     continue
-                try:
-                    idx = int(parts[0])
-                except ValueError:
+                status = parts[1]
+                if status not in ("OK", "FAIL"):
                     continue
-                if parts[1] == "OK":
-                    ok.add(idx)
-                elif parts[1] == "FAIL":
-                    fail.add(idx)
-    return ok, fail
+                if len(parts) >= 4:                       # current: idx, status, key, info
+                    (ok_keys if status == "OK" else fail_keys).add(parts[2])
+                else:                                     # legacy: idx, status[, info]
+                    try:
+                        idx = int(parts[0])
+                    except ValueError:
+                        continue
+                    (ok_idx if status == "OK" else fail_idx).add(idx)
+    return ok_keys, fail_keys, ok_idx, fail_idx
 
 
 def main(argv=None):
@@ -49,22 +73,33 @@ def main(argv=None):
     args = p.parse_args(argv)
 
     lines = Path(args.task_file).read_text().splitlines()
-    total = len([ln for ln in lines if ln.strip()])
+    indices = [i for i, ln in enumerate(lines) if ln.strip()]
+    total = len(indices)
 
     results_paths = sorted(glob.glob(args.results)) or (
         [args.results] if Path(args.results).exists() else [])
     if not results_paths:
         print(f"No results files matched {args.results!r}", file=sys.stderr)
 
-    ok, fail = parse_results(results_paths)
+    ok_keys, fail_keys, ok_idx, fail_idx = parse_results(results_paths)
+    keys = {i: task_key(lines[i]) for i in indices}
+
+    def is_ok(i):
+        return keys[i] in ok_keys or i in ok_idx
+
+    def is_fail(i):
+        return not is_ok(i) and (keys[i] in fail_keys or i in fail_idx)
+
     # A task confirmed OK is done; everything else (failed or never attempted) remains.
-    remaining = [i for i in range(total) if i not in ok]
+    remaining = [i for i in indices if not is_ok(i)]
+    n_ok = total - len(remaining)
+    n_fail = sum(1 for i in indices if is_fail(i))
 
     print(f"task file : {args.task_file}  ({total} tasks)")
     print(f"results   : {len(results_paths)} file(s)")
-    print(f"  OK      : {len(ok)}")
-    print(f"  FAILED  : {len(fail)}")
-    print(f"  pending : {total - len(ok) - len(fail)}")
+    print(f"  OK      : {n_ok}")
+    print(f"  FAILED  : {n_fail}")
+    print(f"  pending : {total - n_ok - n_fail}")
     print(f"  remaining (failed + pending) : {len(remaining)}")
 
     if args.out:

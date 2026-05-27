@@ -367,3 +367,25 @@ class TestResumeAccounting:
         })
         assert code == 1
         assert {t["i"] for t in remaining} == {1}     # task 0 OK; task 1 still pending
+
+    def test_resume_round_credited_by_content_not_index(self, tmp_path):
+        # The historic miscount: a resume round re-numbers its task file, so "OK at
+        # index k" from that round points at a DIFFERENT task in the original file.
+        # Round 1 (against the original 5-task file) finishes tasks 0,1,2 but is killed
+        # before 3,4. The gate writes a resume file [3,4] (now indices 0,1). Round 2
+        # records OK at resume-indices 0 and 1 -- which, matched by content key, must
+        # credit original tasks 3 and 4, NOT 0 and 1. With index matching, 3 and 4 would
+        # be re-listed forever (the 4952-pending loop).
+        tasks = [json.dumps({"i": i}) for i in range(5)]
+        k3 = check_status.task_key(tasks[3])
+        k4 = check_status.task_key(tasks[4])
+        code, remaining = self._run(tmp_path, tasks, {
+            # round 1, against the original file: real indices 0,1,2 done
+            "shell_1.results": (f"0\tOK\t{check_status.task_key(tasks[0])}\t\n"
+                                f"1\tOK\t{check_status.task_key(tasks[1])}\t\n"
+                                f"2\tOK\t{check_status.task_key(tasks[2])}\t\n"),
+            # round 2, against resume file [3,4]: resume-indices 0,1 carry tasks 3,4's keys
+            "shell_2.results": f"0\tOK\t{k3}\t\n1\tOK\t{k4}\t\n",
+        })
+        assert code == 0                              # everything done -> loop terminates
+        assert remaining == []

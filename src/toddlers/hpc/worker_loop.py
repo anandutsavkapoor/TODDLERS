@@ -9,11 +9,12 @@ Each worker writes its own results file ``<results_file>.<worker_id>`` (one line
 task) -- no shared file, no locking, so the pool is safe across multiple nodes
 (cross-node ``flock`` on a shared filesystem is unreliable). Each result line is::
 
-    <task_index>\t<OK|FAIL>\t<info-or-error>
+    <task_index>\t<OK|FAIL>\t<content_key>\t<info-or-error>
 
-The task index ties a result back to its line in the task file;
-:mod:`toddlers.hpc.check_status` aggregates the per-worker files via a glob to find
-unfinished work for a resume.
+``content_key`` is a hash of the task line (:func:`toddlers.hpc.check_status.task_key`);
+it ties a result back to its task by *content*, so :mod:`toddlers.hpc.check_status`
+credits it correctly even when a resume round re-numbers the task file. The leading
+``task_index`` is kept for human debugging only.
 
 Usage (normally invoked by the submit template via ``srun``; the worker reads its
 slot from $SLURM_PROCID / $SLURM_NTASKS, which are global across all nodes)::
@@ -42,6 +43,7 @@ def worker_results_path(results_file, worker_id):
 
 def run(task_file, n_workers, worker_id, results_file, cloudy_exe=None):
     from .runner import dispatch
+    from .check_status import task_key
 
     out_path = worker_results_path(results_file, worker_id)
     os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
@@ -67,14 +69,15 @@ def run(task_file, n_workers, worker_id, results_file, cloudy_exe=None):
             raw = raw.strip()
             if not raw:
                 continue
+            key = task_key(raw)
             try:
                 row = json.loads(raw)
                 dispatch(row, cloudy_exe=cloudy_exe)
-                record(f"{idx}\tOK\t")
+                record(f"{idx}\tOK\t{key}\t")
                 n_ok += 1
             except Exception as exc:  # noqa: BLE001 - one task must not kill the worker
                 msg = repr(exc).replace("\t", " ").replace("\n", " ")
-                record(f"{idx}\tFAIL\t{msg}")
+                record(f"{idx}\tFAIL\t{key}\t{msg}")
                 n_fail += 1
                 print(f"{tag} task {idx} FAILED: {msg}", file=sys.stderr)
                 traceback.print_exc()
