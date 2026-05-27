@@ -187,6 +187,19 @@ size scratch for the full uncompressed grid. On shared **project** scratch, watc
 byte and inode budgets are co-tenant with other users' runs, and always point
 `cloudy_output` at scratch (not a small `$HOME`/`$DATA` quota).
 
+The STAB build (interpolant stage) has a *second* large transient besides `cloudy_output`:
+a parsed-Cloudy **interpolant cache**, ~5 GB **per DTM**. It defaults to the package dir
+(`toddlers/stab/cache`), which on many clusters sits on the small `$HOME`/`$DATA` quota, so a
+DTM sweep that accumulated every DTM's cache there would blow the quota mid-build. Two
+safeguards (both in `campaign.py`): the cache is **cleared per DTM by default** (only one
+DTM's worth on disk at a time — a resume skips finished DTMs via the saved interpolant
+`.pkl`, not the cache), and **`--cache-dir <scratch>`** (env `TODDLERS_INTERP_CACHE`)
+relocates it to scratch entirely. For a large sweep, set `--cache-dir` to a scratch path.
+Pass `--keep-interp-cache` to retain every DTM's cache for debugging (needs the disk).
+Finally, the STAB build **self-re-arms** (`afterany`, bounded by `--max-resume-rounds`, with
+a `.stab_build_complete` sentinel) so it resumes after a walltime cutoff just like the Cloudy
+resume gate — no manual resubmit needed.
+
 ## Cluster gotchas (learned the hard way)
 
 - **Launch the worker pool with `srun`, never a bash `... &` loop.** On some
