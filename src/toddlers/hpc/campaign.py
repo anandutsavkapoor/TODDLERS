@@ -369,10 +369,15 @@ def _submit_postprocess(args, taskdir, after_jobs):
     for dtm in dtms:
         block = [f'echo "=== interpolant for DTM={dtm} ==="']
         if not args.keep_interp_cache:
-            # Bound the cache to one DTM: clear before each build (the previous DTM's pkls are
-            # already saved, so its cache is dead weight; a resume skips done DTMs via
-            # interpolant_exists). Keeps the data-partition footprint flat across a DTM sweep.
-            block.append('rm -f "$CACHE_DIR"/*.pkl "$CACHE_DIR"/*.tmp 2>/dev/null || true')
+            # Bound the cache to one DTM, but ONLY clear when this DTM is actually going to be
+            # (re)built -- i.e. its interpolant .pkl does not exist yet. This keeps the footprint
+            # to one DTM during a fresh sweep, yet never wipes an ALREADY-built DTM's cache on a
+            # resume/re-arm. In particular the last DTM's cache (e.g. kept for comparison) is not
+            # cleared the next time the gate re-enters, since by then its .pkl exists and the
+            # clear is skipped. Probe totSED_lr (the first per-DTM interpolant written).
+            suffix = f"_dtm{dtm:.2f}" if dtm != 1.0 else ""
+            pkl = f"${{PREFIX}}_interp_tables/TODDLERS_totSED_lr_${{PREFIX}}{suffix}.pkl"
+            block.append(f'[ -f "{pkl}" ] || rm -f "$CACHE_DIR"/*.pkl "$CACHE_DIR"/*.tmp 2>/dev/null || true')
         block.append(
             f"python3 -m toddlers.stab.interpolants --evolution-dir {evo_dir_abs} "
             f"--output-dir ${{PREFIX}}_interp_tables --dust-to-metal {dtm}")

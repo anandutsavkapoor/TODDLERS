@@ -60,6 +60,11 @@ def test_rearm_before_cd_and_cache_bounded_per_dtm(tmp_path):
     assert n_dtm == 3 and n_clears == n_dtm        # one clear before each of the 3 DTMs
     # the clear precedes the actual interpolant build (the python call), not just the label
     assert txt.index('rm -f "$CACHE_DIR"/*.pkl') < txt.index("python3 -m toddlers.stab.interpolants")
+    # ...but every clear is GUARDED by the DTM's pkl existing, so an already-built DTM's cache
+    # is never wiped on a resume/re-arm (DTM=1.0 -> unsuffixed pkl; others -> _dtmX.XX).
+    assert txt.count('] || rm -f "$CACHE_DIR"/*.pkl') == n_dtm
+    assert '[ -f "${PREFIX}_interp_tables/TODDLERS_totSED_lr_${PREFIX}.pkl" ] ||' in txt   # DTM=1.0
+    assert '_dtm0.02.pkl" ] ||' in txt                                                     # a suffixed DTM
     # sentinel written only after the build completes
     assert txt.index('touch "$STAB_DONE"') > txt.index("campaign post-processing done")
 
