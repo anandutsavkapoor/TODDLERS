@@ -35,9 +35,9 @@ dev = ["pytest", "pytest-cov", "flake8", "black"]
 docs = ["sphinx", "sphinx-rtd-theme"]
 
 [project.urls]
-Homepage = "https://github.com/anandutsavkapoor/toddlers-public"
-Repository = "https://github.com/anandutsavkapoor/toddlers-public"
-Documentation = "https://github.com/anandutsavkapoor/toddlers-public#readme"
+Homepage = "https://github.com/anandutsavkapoor/TODDLERS"
+Repository = "https://github.com/anandutsavkapoor/TODDLERS"
+Documentation = "https://github.com/anandutsavkapoor/TODDLERS#readme"
 
 [tool.setuptools.packages.find]
 where = ["src"]

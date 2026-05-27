@@ -8,7 +8,7 @@ authors:
 title: "TODDLERS 2.0: Stellar feedback and observables across diverse IMFs, binary populations, and cloud environments"
 version: 2.0.0
 date-released: 2025-XX-XX  # update on publication
-url: "https://github.com/anandutsavkapoor/toddlers-public"
+url: "https://github.com/anandutsavkapoor/TODDLERS"
 license: MIT
 preferred-citation:
   type: article

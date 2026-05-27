@@ -8,7 +8,7 @@ SEDs and SKIRT ``.stab`` SED libraries.
 
 This is the API reference for the ``toddlers`` package. For installation, a quickstart,
 and runnable end-to-end examples, see the project `README
-<https://github.com/anandutsavkapoor/toddlers-public>`_ and the ``examples/`` directory.
+<https://github.com/anandutsavkapoor/TODDLERS>`_ and the ``examples/`` directory.
 
 Getting started
 ---------------

@@ -9,8 +9,8 @@ This is **TODDLERS 2.0**, which adds flexible stellar populations (Starburst99 a
 ## Installation
 
 ```bash
-git clone https://github.com/anandutsavkapoor/toddlers-public.git
-cd toddlers-public
+git clone https://github.com/anandutsavkapoor/TODDLERS.git
+cd TODDLERS
 python3 -m venv .venv && source .venv/bin/activate   # recommended; required on PEP 668
                                                      # systems (recent Ubuntu/Debian)
 pip install -e .                 # core install
