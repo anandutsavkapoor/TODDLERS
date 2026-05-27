@@ -271,6 +271,7 @@ def _submit_postprocess(args, taskdir, after_jobs):
     # variant (paper Appendix B); enable it when running a DTM sweep. Requires the
     # patched Cloudy (cloudy_patches/) so ".diffContUnatt" carries the DiffContUnatt column.
     neb_export = "export TODDLERS_STAB_NEBULAR_CONT=1" if args.dust_to_metal else ""
+    stab_done = os.path.join(os.path.abspath(args.stab_dir), ".stab_build_complete")
     lines = [
         "#!/bin/bash",
         "#SBATCH --job-name=campaign_stab",
@@ -286,8 +287,17 @@ def _submit_postprocess(args, taskdir, after_jobs):
         args.activate_env,
         f"export PYTHONPATH={args.toddlers_src}:${{PYTHONPATH:-}}",
         f"export CLOUDY_EXE={args.cloudy_exe} CLOUDY_DATA_DIR={args.cloudy_data}",
+        # ---- build-completion guard + self-re-arm bookkeeping ----
+        # STAB_DONE marks a fully finished build. The build self-re-arms (afterany) so it
+        # survives the walltime: a timed-out build is continued by its successor
+        # (interpolant_exists skips finished DTMs), independent of any client session. The
+        # sentinel is cleared only on a FRESH launch (ROUND==0 and BUILD_ROUND==0) so a stale
+        # sentinel from a previous campaign cannot short-circuit a new one.
+        f'STAB_DONE={stab_done}',
+        f'ROUND="${{ROUND:-0}}"; BUILD_ROUND="${{BUILD_ROUND:-0}}"; MAXROUND={args.max_resume_rounds}',
+        'if [ "$ROUND" -eq 0 ] && [ "$BUILD_ROUND" -eq 0 ]; then rm -f "$STAB_DONE"; fi',
+        'if [ -f "$STAB_DONE" ]; then echo "[stab] build already complete -> exit 0"; exit 0; fi',
         # ---- resume gate: ensure every Cloudy task is OK before building ----
-        f'ROUND="${{ROUND:-0}}"; MAXROUND={args.max_resume_rounds}',
         f"CORES={args.ntasks}; MAXNODES={args.max_nodes}",
         f'RESUME_DEP=""',
         f'for ph in {phases}; do',
@@ -307,6 +317,15 @@ def _submit_postprocess(args, taskdir, after_jobs):
         '  exit 0',
         'fi',
         '[ -n "$RESUME_DEP" ] && echo "[resume] WARNING: still incomplete after $MAXROUND rounds; building with available models"',
+        # ---- self-re-arm the BUILD (survives walltime; successor no-ops once STAB_DONE) ----
+        # Armed here (cwd still the job WorkDir, before the cd into stab_dir) so the relative
+        # self_path resolves. The successor continues a timed-out build; on a finished build it
+        # hits the STAB_DONE guard above and exits immediately.
+        ('if [ "$BUILD_ROUND" -lt "$MAXROUND" ]; then '
+         f'RSM=$(sbatch --parsable --dependency=afterany:$SLURM_JOB_ID '
+         f'--export=ALL,BUILD_ROUND=$((BUILD_ROUND+1)) "{self_path}") || RSM=arm-failed; '
+         'echo "[stab] armed build successor $RSM afterany $SLURM_JOB_ID '
+         '(build round $((BUILD_ROUND+1))/$MAXROUND)"; fi'),
         # ---- archive non-essential Cloudy output (inode relief on large grids) ----
         # The grid is complete here; pack each parameter dir's diagnostic dumps into one
         # tar and drop the originals, keeping .in/.out/.cont/.phy/.rad loose so the build
@@ -329,9 +348,13 @@ def _submit_postprocess(args, taskdir, after_jobs):
         # by its real path -- a bare "rm cache/*" in stab_dir clears the wrong (empty) dir and
         # leaves the stale package cache in place. The campaign always (re)generates the Cloudy
         # output immediately upstream, so wiping the cache here is safe.
-        'echo "=== clearing stale interpolant cache ==="',
-        'CACHE_DIR="$(python3 -c \'from pathlib import Path; import toddlers.stab.interpolants as m; print(Path(m.__file__).parent / "cache")\')"',
-        'echo "  cache dir: $CACHE_DIR"; rm -f "$CACHE_DIR"/*.pkl "$CACHE_DIR"/*.tmp cache/*.pkl cache/*.tmp 2>/dev/null || true',
+        # Clear the cache only on the first build entry (BUILD_ROUND==0); a re-armed build
+        # must keep the finished DTM caches so it resumes rather than restarting.
+        'if [ "$BUILD_ROUND" -eq 0 ]; then',
+        '  echo "=== clearing stale interpolant cache ==="',
+        '  CACHE_DIR="$(python3 -c \'from pathlib import Path; import toddlers.stab.interpolants as m; print(Path(m.__file__).parent / "cache")\')"',
+        '  echo "  cache dir: $CACHE_DIR"; rm -f "$CACHE_DIR"/*.pkl "$CACHE_DIR"/*.tmp cache/*.pkl cache/*.tmp 2>/dev/null || true',
+        'fi',
     ]
     # One interpolant build per DTM (the .pkl carry a _dtm<val> suffix, so they coexist).
     # The interpolant stage runs after `cd {stab_dir}`, so the evolution dir must be absolute
@@ -363,6 +386,8 @@ def _submit_postprocess(args, taskdir, after_jobs):
                     f"--sed-type {st} --resolution {res}{dtm_flag}")
         lines.append('echo "=== SFR-normalised STAB ==="; python3 -m toddlers.stab.sfr_normalized_stab')
     lines.append('echo "campaign post-processing done"')
+    # Mark the build complete so the armed successor (and any re-submit) no-ops via the guard.
+    lines.append('touch "$STAB_DONE"; echo "[stab] completion sentinel written"')
 
     script = _write_script(args.work_dir, "campaign_stab.sh", "\n".join(lines) + "\n")
     jid = _sbatch(script, dependency=dep, dependency_type="afterany", dry_run=args.dry_run)
