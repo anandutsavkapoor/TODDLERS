@@ -296,10 +296,13 @@ class DataManager:
         self.generator = generator
         self.cached_data = {}
         
-        # Get the directory where generate_interpolants.py is located
-        current_file = Path(__file__).resolve()
-        self.cache_dir = current_file.parent / "cache"
-        self.cache_dir.mkdir(exist_ok=True)
+        # Interpolant build cache. This is a large transient (the parsed Cloudy output, a few
+        # GB per DTM), so the TODDLERS_INTERP_CACHE env var lets it live on scratch instead of
+        # the (often quota-limited) code/home filesystem -- important for large DTM sweeps on a
+        # cluster. Default is the package dir, fine for casual single runs.
+        cache_env = os.environ.get("TODDLERS_INTERP_CACHE")
+        self.cache_dir = Path(cache_env) if cache_env else (Path(__file__).resolve().parent / "cache")
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
         
         print(f"\nCache directory initialized at: {self.cache_dir}")
         

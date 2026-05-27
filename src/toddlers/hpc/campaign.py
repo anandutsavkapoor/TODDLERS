@@ -271,6 +271,10 @@ def _submit_postprocess(args, taskdir, after_jobs):
     # variant (paper Appendix B); enable it when running a DTM sweep. Requires the
     # patched Cloudy (cloudy_patches/) so ".diffContUnatt" carries the DiffContUnatt column.
     neb_export = "export TODDLERS_STAB_NEBULAR_CONT=1" if args.dust_to_metal else ""
+    # Put the (large, transient) interpolant cache on scratch when --cache-dir is given, so it
+    # does not consume the code/home-filesystem quota on a big DTM sweep (TODDLERS_INTERP_CACHE
+    # is read by interpolants.DataManager; the build's CACHE_DIR resolves the same way).
+    cache_export = f"export TODDLERS_INTERP_CACHE={os.path.abspath(args.cache_dir)}" if args.cache_dir else ""
     stab_done = os.path.join(os.path.abspath(args.stab_dir), ".stab_build_complete")
     lines = [
         "#!/bin/bash",
@@ -339,6 +343,7 @@ def _submit_postprocess(args, taskdir, after_jobs):
         axis_export,
         pop_export,
         neb_export,
+        cache_export,
         f"cd {args.stab_dir}",
         'PREFIX="$(python3 -c \'from toddlers.stab import config; print(config.MODEL_PREFIX)\')"',
         "mkdir -p hdf5",
@@ -349,7 +354,7 @@ def _submit_postprocess(args, taskdir, after_jobs):
         # saved, a resume skips it via interpolant_exists (not the cache). So we clear the
         # cache BEFORE each DTM build (below), bounding it to one DTM's worth; clearing it
         # also drops any stale cache from an earlier Cloudy run that could mask fresh output.
-        'CACHE_DIR="$(python3 -c \'from pathlib import Path; import toddlers.stab.interpolants as m; print(Path(m.__file__).parent / "cache")\')"',
+        'CACHE_DIR="$(python3 -c \'import os; from pathlib import Path; import toddlers.stab.interpolants as m; print(os.environ.get("TODDLERS_INTERP_CACHE") or Path(m.__file__).parent / "cache")\')"',
         'echo "  interpolant cache dir: $CACHE_DIR"',
         # --keep-interp-cache: retain every DTM's cache (for debugging), but still drop any
         # cross-run stale cache once on a fresh build so the kept data is from THIS run.
@@ -455,6 +460,8 @@ def _stage2_argv(args, leaf):
         a += ["--no-archive-cloudy"]
     if args.keep_interp_cache:
         a += ["--keep-interp-cache"]
+    if args.cache_dir:
+        a += ["--cache-dir", args.cache_dir]
     return a
 
 
@@ -522,6 +529,12 @@ def main(argv=None):
                         "by default: a DTM sweep keeps only one DTM's cache at a time, else the "
                         "caches accumulate and can exceed the data-partition quota. Turn on to "
                         "inspect the cached parsed-Cloudy data when debugging (needs the disk).")
+    p.add_argument("--cache-dir", default="",
+                   help="directory for the interpolant build cache (the large transient parsed "
+                        "Cloudy data, a few GB per DTM). Default: the package dir "
+                        "(toddlers/stab/cache) on the code filesystem. Point it at SCRATCH for "
+                        "large DTM sweeps so the cache does not consume the home/data-partition "
+                        "quota (sets TODDLERS_INTERP_CACHE for the build).")
 
     # cluster parameters
     p.add_argument("--account", required=True)

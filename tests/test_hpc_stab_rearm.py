@@ -24,14 +24,15 @@ sys.path.insert(0, str(project_root))
 from toddlers.hpc import campaign
 
 
-def _gen(tmp_path, keep_interp_cache=False):
+def _gen(tmp_path, keep_interp_cache=False, cache_dir=""):
     evo = "/fake/evolution_output/template_BPASS/imf_chab100/star_type_bin/cluster_mode_burst/profile_type_uniform"
     args = types.SimpleNamespace(
         account="acc", partition="part", ntasks=128, stab_walltime="06:00:00",
         work_dir=str(tmp_path), toddlers_src="/src", cloudy_exe="/cl.exe", cloudy_data="/cldata",
         python_module="SciPy", activate_env="", max_resume_rounds=3, max_nodes=8,
         stab_dir=str(tmp_path / "stab"), dust_to_metal=[0.02, 0.1, 1.0], evolution_dir=evo,
-        stab="both", archive_cloudy=True, keep_interp_cache=keep_interp_cache, dry_run=True)
+        stab="both", archive_cloudy=True, keep_interp_cache=keep_interp_cache,
+        cache_dir=cache_dir, dry_run=True)
     campaign._submit_postprocess(args, tmp_path / "tasks",
                                  {"shell": "1", "unified": "2", "dissolved": "3"})
     return (tmp_path / "campaign_stab.sh").read_text(), args
@@ -71,3 +72,17 @@ def test_keep_interp_cache_retains_but_drops_stale_once(tmp_path):
     # the single clear is the fresh-build (BUILD_ROUND==0) cross-run-stale drop, before the DTM loop
     assert 'if [ "$BUILD_ROUND" -eq 0 ]; then echo "  [keep-interp-cache]' in txt
     assert txt.index('rm -f "$CACHE_DIR"/*.pkl') < txt.index("python3 -m toddlers.stab.interpolants")
+
+
+def test_cache_dir_puts_cache_on_scratch(tmp_path):
+    # --cache-dir <scratch> must export TODDLERS_INTERP_CACHE so the build cache lives there
+    # (off the quota-limited code filesystem); default (no --cache-dir) exports nothing.
+    txt_default, _ = _gen(tmp_path)
+    assert "TODDLERS_INTERP_CACHE=" not in txt_default
+
+    scratch = "/scratch/project/interp_cache"
+    txt, _ = _gen(tmp_path, cache_dir=scratch)
+    assert f"export TODDLERS_INTERP_CACHE={scratch}" in txt
+    # the env export precedes the cache use, and CACHE_DIR resolves via the same env
+    assert txt.index("TODDLERS_INTERP_CACHE=" + scratch) < txt.index("CACHE_DIR=")
+    assert 'os.environ.get("TODDLERS_INTERP_CACHE")' in txt
