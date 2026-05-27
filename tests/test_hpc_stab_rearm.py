@@ -47,12 +47,17 @@ def test_build_selfrearm_scaffolding_present(tmp_path):
     assert 'touch "$STAB_DONE"' in txt
 
 
-def test_rearm_before_cd_and_cacheclear_guarded(tmp_path):
+def test_rearm_before_cd_and_cache_bounded_per_dtm(tmp_path):
     txt, args = _gen(tmp_path)
     # successor armed while cwd is still the WorkDir (relative self_path resolves)
     assert txt.index("armed build successor") < txt.index("cd " + args.stab_dir)
-    # cache cleared only on the first build entry, before any interpolant build
-    assert 'if [ "$BUILD_ROUND" -eq 0 ]; then' in txt
-    assert txt.index('if [ "$BUILD_ROUND" -eq 0 ]; then') < txt.index("interpolant for DTM")
+    # cache is bounded to one DTM: cleared once per DTM build (not all kept at once),
+    # which is what keeps the data-partition footprint flat across a DTM sweep
+    assert "CACHE_DIR=" in txt
+    n_clears = txt.count('rm -f "$CACHE_DIR"/*.pkl')
+    n_dtm = txt.count("interpolant for DTM")
+    assert n_dtm == 3 and n_clears == n_dtm        # one clear before each of the 3 DTMs
+    # the clear precedes the actual interpolant build (the python call), not just the label
+    assert txt.index('rm -f "$CACHE_DIR"/*.pkl') < txt.index("python3 -m toddlers.stab.interpolants")
     # sentinel written only after the build completes
     assert txt.index('touch "$STAB_DONE"') > txt.index("campaign post-processing done")

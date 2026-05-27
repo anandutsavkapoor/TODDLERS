@@ -342,19 +342,15 @@ def _submit_postprocess(args, taskdir, after_jobs):
         f"cd {args.stab_dir}",
         'PREFIX="$(python3 -c \'from toddlers.stab import config; print(config.MODEL_PREFIX)\')"',
         "mkdir -p hdf5",
-        # The selective interpolant cache (keyed on Z,eta,n,logM,DTM) has no data-version
-        # check, so a cache written by an earlier Cloudy run would mask the freshly generated
-        # output. It lives in the PACKAGE dir (toddlers/stab/cache), not the cwd, so clear it
-        # by its real path -- a bare "rm cache/*" in stab_dir clears the wrong (empty) dir and
-        # leaves the stale package cache in place. The campaign always (re)generates the Cloudy
-        # output immediately upstream, so wiping the cache here is safe.
-        # Clear the cache only on the first build entry (BUILD_ROUND==0); a re-armed build
-        # must keep the finished DTM caches so it resumes rather than restarting.
-        'if [ "$BUILD_ROUND" -eq 0 ]; then',
-        '  echo "=== clearing stale interpolant cache ==="',
-        '  CACHE_DIR="$(python3 -c \'from pathlib import Path; import toddlers.stab.interpolants as m; print(Path(m.__file__).parent / "cache")\')"',
-        '  echo "  cache dir: $CACHE_DIR"; rm -f "$CACHE_DIR"/*.pkl "$CACHE_DIR"/*.tmp cache/*.pkl cache/*.tmp 2>/dev/null || true',
-        'fi',
+        # The selective interpolant cache lives in the PACKAGE dir (toddlers/stab/cache), not
+        # the cwd. It is per (Z,eta,n,logM,DTM); each DTM's 64 entries are ~25 GB, so keeping
+        # all 7 DTMs' caches at once would blow the data-partition quota. The cache is only
+        # needed WHILE a given DTM's interpolants are being built -- once that DTM's pkls are
+        # saved, a resume skips it via interpolant_exists (not the cache). So we clear the
+        # cache BEFORE each DTM build (below), bounding it to one DTM's worth; clearing it
+        # also drops any stale cache from an earlier Cloudy run that could mask fresh output.
+        'CACHE_DIR="$(python3 -c \'from pathlib import Path; import toddlers.stab.interpolants as m; print(Path(m.__file__).parent / "cache")\')"',
+        'echo "  interpolant cache dir: $CACHE_DIR"',
     ]
     # One interpolant build per DTM (the .pkl carry a _dtm<val> suffix, so they coexist).
     # The interpolant stage runs after `cd {stab_dir}`, so the evolution dir must be absolute
@@ -363,6 +359,10 @@ def _submit_postprocess(args, taskdir, after_jobs):
     for dtm in dtms:
         lines += [
             f'echo "=== interpolant for DTM={dtm} ==="',
+            # Bound the cache to one DTM: clear before each build (the previous DTM's pkls are
+            # already saved, so its cache is dead weight; a resume skips done DTMs via
+            # interpolant_exists). Keeps the data-partition footprint flat across a DTM sweep.
+            'rm -f "$CACHE_DIR"/*.pkl "$CACHE_DIR"/*.tmp 2>/dev/null || true',
             f"python3 -m toddlers.stab.interpolants --evolution-dir {evo_dir_abs} "
             f"--output-dir ${{PREFIX}}_interp_tables --dust-to-metal {dtm}",
         ]
