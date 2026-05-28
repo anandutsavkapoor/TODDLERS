@@ -40,6 +40,9 @@ examples/*.png
 examples/**/*.png
 # ...except this illustrative figure of the unattenuated-continuum patch effect.
 !examples/nebular_continuum_att_vs_unatt.png
+# ...and the shipped variable-DTM STAB sanity-check figures (the .stab inputs are not shipped).
+!examples/stab/dtm_validation/*.png
+examples/stab/dtm_validation/*.stab
 examples/paper_figures/figures/
 examples/paper_figures/evolution_output/
 examples/paper_figures/grain_comparison/*.out

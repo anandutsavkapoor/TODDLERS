@@ -20,6 +20,7 @@ Usage::
 import argparse
 import os
 import pickle
+from pathlib import Path
 
 import numpy as np
 import matplotlib
@@ -28,6 +29,11 @@ import matplotlib.pyplot as plt
 
 from toddlers.stab import config as cfg
 from toddlers.constants import M_SUN
+
+# publication style, consistent with the paper figures (serif, four-sided ticks)
+_STYLE = Path(__file__).resolve().parents[1] / "paper_figures" / "paper_style.mplstyle"
+if _STYLE.exists():
+    plt.style.use(str(_STYLE))
 
 # line indices from line_map.pkl (verified for the chab100 line list)
 L = dict(Ha=42, Hb=33, OIII5007=36, NII6584=43, SII6716=45, SII6731=46)
@@ -66,7 +72,7 @@ def main():
     DUST_EMER = 1 - DUST_INTR
     print(f"intrinsic slot = {DUST_INTR} (median Ha {np.nanmedian(ha0):.2e} vs {np.nanmedian(ha1):.2e})")
 
-    fig, ax = plt.subplots(2, 2, figsize=(11, 9))
+    fig, ax = plt.subplots(2, 2, figsize=(8.4, 7.2), constrained_layout=True)
 
     # ---- (a) Halpha vs age, all 16 cells ----
     a = ax[0, 0]
@@ -78,7 +84,7 @@ def main():
                     a.semilogy(t, y, lw=0.8, alpha=0.6,
                                color="C0" if iZ_ == 0 else "C3")
     a.set_xlabel("age [Myr]"); a.set_ylabel(r"$L_{\rm H\alpha}$ (emergent) [erg/s]")
-    a.set_title("(a) Halpha declines with age")
+    a.set_title(r"(a) H$\alpha$ declines with age")
     a.plot([], [], "C0", label=f"Z={Zvals[0]:.3f}"); a.plot([], [], "C3", label=f"Z={Zvals[1]:.3f}")
     a.legend(fontsize=8)
 
@@ -116,7 +122,7 @@ def main():
         b.set_xlim(1e49, 3e53)
         b.set_xlabel(r"$Q_{\rm abs}=Q\,(1-f_{\rm esc})$ [photons/s]")
         b.set_ylabel(r"$L_{\rm H\alpha}$ intrinsic [erg/s]")
-        b.set_title("(b) intrinsic Halpha vs absorbed Q (leak-corrected)")
+        b.set_title(r"(b) intrinsic H$\alpha$ vs absorbed $Q$ (leak-corrected)")
         b.legend(fontsize=8, loc="upper left")
         if sc_b is not None:
             fig.colorbar(sc_b, ax=b, label=r"$f_{\rm esc}$")
@@ -143,28 +149,35 @@ def main():
     fig.colorbar(sc, ax=c, label="age [Myr]")
 
     # ---- (d) dust IR peak shift ----
+    # Flux-weighted centroid of lambda*L_lambda over the IR (10-1000 micron) is a smooth,
+    # grid-independent proxy for the dust-emission peak (argmax jumps between grid nodes).
+    # Plotted only while the IR luminosity is within 1 dex of its peak, i.e. while there is
+    # meaningful dust emission (after the cloud disperses the "peak" is ill-defined).
     d = ax[1, 1]
     try:
         sed = pickle.load(open(f"{D}/TODDLERS_totSED_lr_{cfg.MODEL_PREFIX}.pkl", "rb"))
         wl = 10.0**np.asarray(sed.grid[0])     # axis0 is log10(lambda/micron)
-        irmask = wl > 3.0
+        ir = (wl >= 10.0) & (wl <= 1000.0)
+        logwl = np.log10(wl[ir])
         for iN_ in range(2):
-            peak_lam = []
+            cen, Lir = [], []
             for k in range(t.size):
-                # SED values are log10(L_lambda); peak of lambda*L_lambda in the IR
-                flux = 10.0**np.asarray(sed.values)[:, k, 1, 1, iN_, 1]
-                lflux = flux * wl
-                sub = lflux.copy(); sub[~irmask] = -np.inf
-                peak_lam.append(wl[np.argmax(sub)])
-            d.plot(t, peak_lam, label=f"n_cl={nvals[iN_]:.0f}")
-        d.set_xlabel("age [Myr]"); d.set_ylabel(r"dust-peak $\lambda$ [micron]")
-        d.set_title("(d) dust IR peak shift"); d.legend(fontsize=8)
+                lL = (10.0**np.asarray(sed.values)[:, k, 1, 1, iN_, 1] * wl)[ir]
+                cen.append(10.0**(np.sum(logwl * lL) / np.sum(lL)))
+                Lir.append(np.trapz(lL / wl[ir], wl[ir]))
+            cen, Lir = np.array(cen), np.array(Lir)
+            keep = Lir > 0.1 * Lir.max()
+            d.plot(t[keep], cen[keep], "-o", ms=3,
+                   label=rf"$n_{{\rm cl}}={nvals[iN_]:.0f}\,{{\rm cm^{{-3}}}}$")
+        d.set_xlabel("age [Myr]"); d.set_ylabel(r"dust IR centroid $\lambda$ [$\mu$m]")
+        d.set_title(r"(d) dust IR peak shifts redward with age"); d.legend(fontsize=8)
     except Exception as e:
         d.text(0.1, 0.5, f"dust peak skipped:\n{e}", fontsize=8)
 
-    fig.tight_layout()
+    fig.suptitle(f"Nebular physics checks - {cfg.MODEL_PREFIX} "
+                 f"(emergent + intrinsic, baseline $f_{{\\rm dust}}=1$)", fontsize=11)
     fp = f"{args.out}/physics_checks_{cfg.MODEL_PREFIX}.png"
-    fig.savefig(fp, dpi=130); print("wrote", fp)
+    fig.savefig(fp, dpi=150); print("wrote", fp)
 
 
 if __name__ == "__main__":
