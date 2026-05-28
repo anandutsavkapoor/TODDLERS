@@ -48,35 +48,30 @@ def test_build_selfrearm_scaffolding_present(tmp_path):
     assert 'touch "$STAB_DONE"' in txt
 
 
-def test_rearm_before_cd_and_cache_bounded_per_dtm(tmp_path):
+def test_default_delete_all_cache(tmp_path):
+    # DELETE ALL (default): clear before each DTM build (bound the live footprint to one DTM)
+    # plus one final clear after the loop, so the cache never persists. No guard, no "last DTM
+    # survives" -- a clean binary policy.
     txt, args = _gen(tmp_path)
-    # successor armed while cwd is still the WorkDir (relative self_path resolves)
     assert txt.index("armed build successor") < txt.index("cd " + args.stab_dir)
-    # cache is bounded to one DTM: cleared once per DTM build (not all kept at once),
-    # which is what keeps the data-partition footprint flat across a DTM sweep
     assert "CACHE_DIR=" in txt
     n_clears = txt.count('rm -f "$CACHE_DIR"/*.pkl')
     n_dtm = txt.count("interpolant for DTM")
-    assert n_dtm == 3 and n_clears == n_dtm        # one clear before each of the 3 DTMs
-    # the clear precedes the actual interpolant build (the python call), not just the label
+    assert n_dtm == 3 and n_clears == n_dtm + 1          # one before each DTM + one final
+    # unconditional clears (no pkl-existence guard)
+    assert '] || rm -f "$CACHE_DIR"/*.pkl' not in txt
+    # first clear precedes the first interpolant build; final clear follows the last
     assert txt.index('rm -f "$CACHE_DIR"/*.pkl') < txt.index("python3 -m toddlers.stab.interpolants")
-    # ...but every clear is GUARDED by the DTM's pkl existing, so an already-built DTM's cache
-    # is never wiped on a resume/re-arm (DTM=1.0 -> unsuffixed pkl; others -> _dtmX.XX).
-    assert txt.count('] || rm -f "$CACHE_DIR"/*.pkl') == n_dtm
-    assert '[ -f "${PREFIX}_interp_tables/TODDLERS_totSED_lr_${PREFIX}.pkl" ] ||' in txt   # DTM=1.0
-    assert '_dtm0.02.pkl" ] ||' in txt                                                     # a suffixed DTM
+    assert txt.rindex('rm -f "$CACHE_DIR"/*.pkl') > txt.rindex("python3 -m toddlers.stab.interpolants")
     # sentinel written only after the build completes
     assert txt.index('touch "$STAB_DONE"') > txt.index("campaign post-processing done")
 
 
-def test_keep_interp_cache_retains_but_drops_stale_once(tmp_path):
+def test_keep_all_cache_no_clears(tmp_path):
+    # KEEP ALL (--keep-interp-cache): no cache clearing whatsoever.
     txt, _ = _gen(tmp_path, keep_interp_cache=True)
-    # no per-DTM clears (caches kept for debugging)
-    assert txt.count('rm -f "$CACHE_DIR"/*.pkl') == 1          # only the one-time fresh clear
-    assert "[keep-interp-cache]" in txt
-    # the single clear is the fresh-build (BUILD_ROUND==0) cross-run-stale drop, before the DTM loop
-    assert 'if [ "$BUILD_ROUND" -eq 0 ]; then echo "  [keep-interp-cache]' in txt
-    assert txt.index('rm -f "$CACHE_DIR"/*.pkl') < txt.index("python3 -m toddlers.stab.interpolants")
+    assert txt.count('rm -f "$CACHE_DIR"/*.pkl') == 0
+    assert "[keep-interp-cache]" not in txt
 
 
 def test_cache_dir_puts_cache_on_scratch(tmp_path):

@@ -191,12 +191,14 @@ The STAB build (interpolant stage) has a *second* large transient besides `cloud
 a parsed-Cloudy **interpolant cache** whose size **scales with the grid** (one entry per
 cloud, accumulating per DTM). It defaults to the package dir (`toddlers/stab/cache`), which
 on many clusters sits on the small `$HOME`/`$DATA` quota, so a DTM sweep that accumulated
-every DTM's cache there can blow the quota mid-build (this bit the paper's variable-DTM run). Two
-safeguards (both in `campaign.py`): the cache is **cleared per DTM by default** (only one
-DTM's worth on disk at a time — a resume skips finished DTMs via the saved interpolant
-`.pkl`, not the cache), and **`--cache-dir <scratch>`** (env `TODDLERS_INTERP_CACHE`)
-relocates it to scratch entirely. For a large sweep, set `--cache-dir` to a scratch path.
-Pass `--keep-interp-cache` to retain every DTM's cache for debugging (needs the disk).
+every DTM's cache there can blow the quota mid-build (this bit the paper's variable-DTM run).
+The policy is a clean binary (both in `campaign.py`): **delete all** by default (the cache is
+cleared before each DTM build and once more at the end, so it never persists and the live
+footprint stays at one DTM — a resume skips finished DTMs via the saved interpolant `.pkl`, not
+the cache), or **keep all** with **`--keep-interp-cache`** (no clearing — retain every DTM's
+cache for debugging). Independently, **`--cache-dir <scratch>`** (env `TODDLERS_INTERP_CACHE`)
+relocates the cache off the quota partition; for a large sweep, or whenever you keep-all, set
+`--cache-dir` to a scratch path.
 Finally, the STAB build **self-re-arms** (`afterany`, bounded by `--max-resume-rounds`, with
 a `.stab_build_complete` sentinel) so it resumes after a walltime cutoff just like the Cloudy
 resume gate — no manual resubmit needed.

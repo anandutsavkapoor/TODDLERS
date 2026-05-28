@@ -347,41 +347,32 @@ def _submit_postprocess(args, taskdir, after_jobs):
         f"cd {args.stab_dir}",
         'PREFIX="$(python3 -c \'from toddlers.stab import config; print(config.MODEL_PREFIX)\')"',
         "mkdir -p hdf5",
-        # The selective interpolant cache lives in the PACKAGE dir (toddlers/stab/cache), not
-        # the cwd. It is per (Z,eta,n,logM,DTM); each DTM's 64 entries are ~25 GB, so keeping
-        # all 7 DTMs' caches at once would blow the data-partition quota. The cache is only
-        # needed WHILE a given DTM's interpolants are being built -- once that DTM's pkls are
-        # saved, a resume skips it via interpolant_exists (not the cache). So we clear the
-        # cache BEFORE each DTM build (below), bounding it to one DTM's worth; clearing it
-        # also drops any stale cache from an earlier Cloudy run that could mask fresh output.
+        # Interpolant cache policy is BINARY (CACHE_DIR honours TODDLERS_INTERP_CACHE, default
+        # the package dir). The cache is per (Z,eta,n,logM,DTM) and large, so keeping all DTMs'
+        # caches at once can blow the data-partition quota. Default = DELETE ALL: clear before
+        # each DTM build (bounds the live footprint to one DTM and drops any stale cache from an
+        # earlier run) plus a final clear after the loop, so nothing persists. --keep-interp-cache
+        # = KEEP ALL: no clearing at all (point it at scratch via --cache-dir). The cache is only
+        # needed while a DTM's interpolants build; a resume skips finished DTMs via
+        # interpolant_exists, not the cache.
         'CACHE_DIR="$(python3 -c \'import os; from pathlib import Path; import toddlers.stab.interpolants as m; print(os.environ.get("TODDLERS_INTERP_CACHE") or Path(m.__file__).parent / "cache")\')"',
         'echo "  interpolant cache dir: $CACHE_DIR"',
-        # --keep-interp-cache: retain every DTM's cache (for debugging), but still drop any
-        # cross-run stale cache once on a fresh build so the kept data is from THIS run.
-        ('if [ "$BUILD_ROUND" -eq 0 ]; then echo "  [keep-interp-cache] clearing cross-run stale cache once"; '
-         'rm -f "$CACHE_DIR"/*.pkl "$CACHE_DIR"/*.tmp 2>/dev/null || true; fi'
-         if args.keep_interp_cache else ""),
     ]
     # One interpolant build per DTM (the .pkl carry a _dtm<val> suffix, so they coexist).
     # The interpolant stage runs after `cd {stab_dir}`, so the evolution dir must be absolute
     # (it is relative to the repo root where the campaign is invoked / the job's WorkDir).
     evo_dir_abs = os.path.abspath(args.evolution_dir)
+    clear_cache = 'rm -f "$CACHE_DIR"/*.pkl "$CACHE_DIR"/*.tmp 2>/dev/null || true'
     for dtm in dtms:
         block = [f'echo "=== interpolant for DTM={dtm} ==="']
         if not args.keep_interp_cache:
-            # Bound the cache to one DTM, but ONLY clear when this DTM is actually going to be
-            # (re)built -- i.e. its interpolant .pkl does not exist yet. This keeps the footprint
-            # to one DTM during a fresh sweep, yet never wipes an ALREADY-built DTM's cache on a
-            # resume/re-arm. In particular the last DTM's cache (e.g. kept for comparison) is not
-            # cleared the next time the gate re-enters, since by then its .pkl exists and the
-            # clear is skipped. Probe totSED_lr (the first per-DTM interpolant written).
-            suffix = f"_dtm{dtm:.2f}" if dtm != 1.0 else ""
-            pkl = f"${{PREFIX}}_interp_tables/TODDLERS_totSED_lr_${{PREFIX}}{suffix}.pkl"
-            block.append(f'[ -f "{pkl}" ] || rm -f "$CACHE_DIR"/*.pkl "$CACHE_DIR"/*.tmp 2>/dev/null || true')
+            block.append(clear_cache)        # DELETE ALL: clear before each DTM (bound + drop stale)
         block.append(
             f"python3 -m toddlers.stab.interpolants --evolution-dir {evo_dir_abs} "
             f"--output-dir ${{PREFIX}}_interp_tables --dust-to-metal {dtm}")
         lines += block
+    if not args.keep_interp_cache:
+        lines.append(clear_cache)            # DELETE ALL: final clear so nothing (incl. the last DTM) persists
     # Recollapse data is DTM-independent; SFR-norm reads hdf5/recollapse_data_<PREFIX>.hdf5.
     lines.append("cp ${PREFIX}_interp_tables/recollapse_data.h5 hdf5/recollapse_data_${PREFIX}.hdf5")
     if args.stab in ("both", "cloud"):
@@ -529,12 +520,13 @@ def main(argv=None):
                         "Cloudy tasks (failed or timed-out) before building anyway. Guards "
                         "against a persistently-failing model looping forever.")
     p.add_argument("--keep-interp-cache", action="store_true",
-                   help="keep the per-DTM interpolant cache (toddlers/stab/cache; parsed Cloudy "
-                        "data, size scales with the grid) instead of clearing it before each DTM "
-                        "build. Off by default: a DTM sweep keeps only one DTM's cache at a time, "
-                        "else the caches accumulate per DTM and can exceed the data-partition "
-                        "quota. Turn on to inspect the cached parsed-Cloudy data when debugging "
-                        "(needs the disk).")
+                   help="KEEP ALL interpolant caches (toddlers/stab/cache; parsed Cloudy data, "
+                        "size scales with the grid). Default is DELETE ALL: the cache is cleared "
+                        "before each DTM build and once more at the end, so it never persists and "
+                        "the live footprint stays at one DTM (else a DTM sweep's caches accumulate "
+                        "and can exceed the data-partition quota). Turn this on to retain every "
+                        "DTM's cache for debugging -- pair it with --cache-dir <scratch> so the "
+                        "kept caches do not sit on the home/data quota.")
     p.add_argument("--cache-dir", default="",
                    help="directory for the interpolant build cache (a large transient of parsed "
                         "Cloudy data whose size scales with the grid). Default: the package dir "
