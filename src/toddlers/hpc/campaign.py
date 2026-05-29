@@ -580,8 +580,11 @@ def main(argv=None):
         # Start-from-existing: the .dat are present, so enumerate + chain now (one shot).
         taskdir = _gen_cloudy_tasks(args)
         cloudy_jobs = _submit_cloudy_chain(args, taskdir, after=None)
-        if args.stab != "none":
-            _submit_postprocess(args, taskdir, cloudy_jobs)
+        # Always submit post-processing: it builds the per-DTM SED interpolant (the prerequisite
+        # for every downstream product) and writes the .stab_build_complete sentinel. --stab only
+        # selects which STAB *families* are built on top; --stab none = interpolant only (the mode
+        # the per-DTM dtm_sweep coordinator drives, then assembles the 5D STAB itself).
+        _submit_postprocess(args, taskdir, cloudy_jobs)
 
     print("\nSubmitted. Track with: squeue --me ; "
           "resume failures with: python -m toddlers.hpc.check_status --task-file <phase>.tasks "
