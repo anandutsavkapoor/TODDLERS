@@ -113,6 +113,8 @@ def _campaign_cmd(args, dtm):
            "--cloudy-exe", args.cloudy_exe, "--cloudy-data", args.cloudy_data,
            "--python-module", args.python_module,
            "--max-resume-rounds", str(args.max_resume_rounds)]
+    if args.activate_env:
+        cmd += ["--activate-env", args.activate_env]   # extra module-load lines for every campaign job
     return cmd
 
 
@@ -208,6 +210,11 @@ def main():
     ap.add_argument("--toddlers-src", required=True)
     ap.add_argument("--cloudy-exe", required=True); ap.add_argument("--cloudy-data", required=True)
     ap.add_argument("--python-module", default="SciPy-bundle/2024.05-gfbf-2024a")
+    ap.add_argument("--activate-env", default="",
+                    help="extra shell lines injected into every campaign job after the primary "
+                         "--python-module load (e.g. additional 'module load' lines for clusters "
+                         "where matplotlib/h5py are separate modules). Use embedded newlines for "
+                         "multiple lines.")
     ap.add_argument("--max-resume-rounds", type=int, default=10)
     # coordinator polling
     ap.add_argument("--poll-seconds", type=int, default=300)
