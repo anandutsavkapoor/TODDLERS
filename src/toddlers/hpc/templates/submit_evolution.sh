@@ -34,6 +34,8 @@ export PYTHONPATH=@TODDLERS_SRC@:${PYTHONPATH:-}
 
 # Large data lives outside the package; point the resolver at it.
 export TODDLERS_DATA=@TODDLERS_DATA@
+# Base dir for cloudy_output/ (empty -> package default); set to scratch for large runs.
+export TODDLERS_OUTPUT_ROOT=@OUTPUT_ROOT@
 
 # --- run -------------------------------------------------------------------
 TASKFILE=@TASKFILE@                   # e.g. $PWD/tasks/evolution.tasks

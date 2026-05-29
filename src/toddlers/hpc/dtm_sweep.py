@@ -115,6 +115,8 @@ def _campaign_cmd(args, dtm):
            "--max-resume-rounds", str(args.max_resume_rounds)]
     if args.activate_env:
         cmd += ["--activate-env", args.activate_env]   # extra module-load lines for every campaign job
+    if args.output_root:
+        cmd += ["--output-root", args.output_root]     # where cloudy_output/ is written+read (scratch)
     return cmd
 
 
@@ -197,7 +199,12 @@ def main():
                     help="f_dust grid, e.g. 1e-3 0.02 0.1 0.4 1.0 (processed ascending)")
     ap.add_argument("--evolution-dir", required=True)
     ap.add_argument("--work-root", required=True, help="coordinator state + per-DTM work dirs")
-    ap.add_argument("--cloudy-output", required=True, help="Cloudy output root (deleted per DTM)")
+    ap.add_argument("--cloudy-output", required=True,
+                    help="Cloudy output root this coordinator scans + deletes per DTM. Must equal "
+                         "<output-root>/cloudy_output (where the campaign jobs actually write).")
+    ap.add_argument("--output-root", default="",
+                    help="base dir for cloudy_output/, forwarded to campaign as --output-root "
+                         "(exported as TODDLERS_OUTPUT_ROOT). Set it to the run root on scratch.")
     ap.add_argument("--stab-dir", required=True, help="holds <prefix>_interp_tables (.pkls accumulate)")
     ap.add_argument("--cache-dir", required=True, help="interpolant cache (on scratch)")
     ap.add_argument("--prefix", default="BPASS_chab100_bin")

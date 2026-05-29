@@ -1,5 +1,5 @@
 from .imports import os, np, interp1d, subprocess, contextmanager
-from .utils import dtm_label
+from .utils import dtm_label, resolve_output_root
 from .cloudy_base_input_generator import BaseCloudyInputGenerator
 from .cloudy_shell_model_generator import ShellModelGenerator
 from .cloudy_unified_model_generator import UnifiedModelGenerator
@@ -130,7 +130,9 @@ class CloudySimulationManager:
 
         src_dir = os.path.dirname(os.path.abspath(__file__))
         project_root = os.path.dirname(src_dir)
-        self.results_dir = os.path.join(project_root, CLOUDY_OUTPUT_DIR)
+        # Cloudy output is large; honor $TODDLERS_OUTPUT_ROOT so it can live on scratch instead
+        # of inside the package install dir (the historical, install-location-bound default).
+        self.results_dir = os.path.join(resolve_output_root(project_root), CLOUDY_OUTPUT_DIR)
 
         params = self.simulation_params
         params_dir = (

@@ -21,6 +21,19 @@ def parse_dtm(name):
     return float(m.group(1)) if m else 1.0
 
 
+def resolve_output_root(default_root):
+    """Base directory under which ``cloudy_output/`` (and ``evolution_output/``) live.
+
+    Returns ``$TODDLERS_OUTPUT_ROOT`` when set, else ``default_root``. Cloudy output is large
+    (~0.5 TiB per dust-to-metal value on a full grid), so it must be relocatable onto scratch
+    rather than living inside the package install tree. Historically the location was hardcoded
+    to the package's parent dir (``dirname(dirname(__file__))``), which is wrong for a read-only
+    or relocated install and forces a symlink hack; this env override sets it cleanly. The
+    default preserves the original behavior, so nothing changes unless the variable is set.
+    """
+    return os.environ.get("TODDLERS_OUTPUT_ROOT") or default_root
+
+
 def generate_toddlers_banner():
     """Generates TODDLERS banner for logs etc."""
     banner = [

@@ -32,7 +32,7 @@ def _gen(tmp_path, keep_interp_cache=False, cache_dir=""):
         python_module="SciPy", activate_env="", max_resume_rounds=3, max_nodes=8,
         stab_dir=str(tmp_path / "stab"), dust_to_metal=[0.02, 0.1, 1.0], evolution_dir=evo,
         stab="both", archive_cloudy=True, keep_interp_cache=keep_interp_cache,
-        cache_dir=cache_dir, dry_run=True)
+        cache_dir=cache_dir, output_root="", dry_run=True)
     campaign._submit_postprocess(args, tmp_path / "tasks",
                                  {"shell": "1", "unified": "2", "dissolved": "3"})
     return (tmp_path / "campaign_stab.sh").read_text(), args

@@ -46,7 +46,7 @@ def _cloudy_args(tmp_path, ratio):
         account="acc", partition="part", ntasks=128, walltime="03:00:00",
         python_module="SciPy", activate_env="", toddlers_src="/src", toddlers_data="/data",
         work_dir=str(tmp_path), cloudy_exe="/cl.exe", small_to_large_ratio=ratio,
-        add_dig=False, max_nodes=8, dry_run=True)
+        add_dig=False, max_nodes=8, output_root="", dry_run=True)
     campaign._submit_cloudy_chain(args, taskdir)
     return (tmp_path / "campaign_cloudy.sh").read_text()
 

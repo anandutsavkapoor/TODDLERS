@@ -24,7 +24,7 @@ from toddlers.track_simulation import load_output_file
 from toddlers.cloudy_timegrid_generator import TimeGridGenerator
 from toddlers.cloudy_output_handler import CloudyOutputHandler
 from toddlers.constants import *
-from toddlers.utils import dtm_label
+from toddlers.utils import dtm_label, resolve_output_root
 import argparse
 from .line_profiles import LineProfileGenerator
 from .config import INCLUDE_NEBULAR_CONTINUUM
@@ -76,12 +76,14 @@ class TODDLERSInterpolantGenerator:
         parts = self.evolution_dir.parts
         try:
             evo_idx = parts.index("evolution_output")
-            self.root_dir = Path(*parts[:evo_idx])
+            default_root = Path(*parts[:evo_idx])
             self.rel_path = Path(*parts[evo_idx+1:])
         except ValueError:
             raise RuntimeError("Path must contain 'evolution_output' directory")
 
-        # Derive Cloudy directory
+        # Cloudy output base: honor $TODDLERS_OUTPUT_ROOT (so it can sit on scratch), else the
+        # parent of evolution_output. Must match where CloudySimulationManager WROTE the output.
+        self.root_dir = Path(resolve_output_root(str(default_root)))
         self.cloudy_dir = self.root_dir / "cloudy_output" / self.rel_path
         
         print("\nDirectory Setup:")

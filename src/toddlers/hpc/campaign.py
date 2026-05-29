@@ -130,6 +130,7 @@ def _common_replacements(args):
         "@WALLTIME@": args.walltime,
         "@PYTHON_MODULE@": args.python_module,
         "@ACTIVATE_ENV@": args.activate_env,
+        "@OUTPUT_ROOT@": os.path.abspath(args.output_root) if args.output_root else "",
         "@TODDLERS_SRC@": args.toddlers_src,
         "@TODDLERS_DATA@": args.toddlers_data or args.toddlers_src.replace("/src", "/src/toddlers/database"),
     }
@@ -297,6 +298,10 @@ def _submit_postprocess(args, taskdir, after_jobs):
         args.activate_env,
         f"export PYTHONPATH={args.toddlers_src}:${{PYTHONPATH:-}}",
         f"export CLOUDY_EXE={args.cloudy_exe} CLOUDY_DATA_DIR={args.cloudy_data}",
+        # Cloudy-output base: the interpolant build must read from the same root the Cloudy
+        # workers wrote to (scratch when set), not the package install dir.
+        (f"export TODDLERS_OUTPUT_ROOT={os.path.abspath(args.output_root)}"
+         if args.output_root else ""),
         # ---- build-completion guard + self-re-arm bookkeeping ----
         # STAB_DONE marks a fully finished build. The build self-re-arms (afterany) so it
         # survives the walltime: a timed-out build is continued by its successor
@@ -343,7 +348,7 @@ def _submit_postprocess(args, taskdir, after_jobs):
         # so `|| true`: a tar hiccup must not abort the STAB build.
         ('echo "=== archiving non-essential Cloudy output (inode relief) ==="\n'
          f"python3 -m toddlers.hpc.archive_cloudy_output "
-         f"{os.path.join(args.toddlers_src, 'cloudy_output')} || true")
+         f"{os.path.join(os.path.abspath(args.output_root) if args.output_root else args.toddlers_src, 'cloudy_output')} || true")
         if args.archive_cloudy else "",
         # ---- build (grid complete) ----
         axis_export,
@@ -450,6 +455,8 @@ def _stage2_argv(args, leaf):
         a += ["--python-module", args.python_module]
     if args.activate_env:
         a += ["--activate-env", args.activate_env]
+    if args.output_root:
+        a += ["--output-root", args.output_root]
     if args.toddlers_data:
         a += ["--toddlers-data", args.toddlers_data]
     if args.dust_to_metal:
@@ -482,6 +489,8 @@ def _submit_stage2(args, evo_job, leaf):
         f"module load {args.python_module}" if args.python_module else "",
         args.activate_env, f"export PYTHONPATH={args.toddlers_src}:${{PYTHONPATH:-}}",
         f"export CLOUDY_EXE={args.cloudy_exe} CLOUDY_DATA_DIR={args.cloudy_data}",
+        (f"export TODDLERS_OUTPUT_ROOT={os.path.abspath(args.output_root)}"
+         if args.output_root else ""),
         f'echo "stage-2: enumerating Cloudy from {leaf} and submitting the chain"',
         inner,
     ]
@@ -558,6 +567,11 @@ def main(argv=None):
     p.add_argument("--python-module", default="", help="module to load (e.g. SciPy-bundle/2024.05-gfbf-2024a)")
     p.add_argument("--activate-env", default="", help="shell command to activate the toddlers env (conda/venv)")
     p.add_argument("--toddlers-src", required=True, help="path to the package src/ (added to PYTHONPATH)")
+    p.add_argument("--output-root", default="",
+                   help="base dir under which cloudy_output/ is written and read (it is large: "
+                        "~0.5 TiB per DTM on a full grid). Default: the package's parent dir "
+                        "(install-location-bound). Point it at scratch for big runs; it is exported "
+                        "as TODDLERS_OUTPUT_ROOT to every Cloudy/build job so writer and reader agree.")
     p.add_argument("--toddlers-data", default=None, help="TODDLERS_DATA dir (default: <src>/toddlers/database)")
     p.add_argument("--cloudy-exe", default="cloudy.exe")
     p.add_argument("--cloudy-data", default="", help="Cloudy data dir (CLOUDY_DATA_DIR)")

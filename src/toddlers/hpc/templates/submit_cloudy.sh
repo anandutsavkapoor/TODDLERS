@@ -30,6 +30,9 @@ module load @PYTHON_MODULE@
 @ACTIVATE_ENV@
 export PYTHONPATH=@TODDLERS_SRC@:${PYTHONPATH:-}
 export TODDLERS_DATA=@TODDLERS_DATA@
+# Base dir for cloudy_output/ (empty -> package default). Keeps the large Cloudy output off the
+# install/home filesystem when set to scratch; the interpolant build reads the same root.
+export TODDLERS_OUTPUT_ROOT=@OUTPUT_ROOT@
 
 # Cloudy: keep intermediates in node RAM, and pass the cluster's cloudy.exe.
 export TMPDIR=/dev/shm

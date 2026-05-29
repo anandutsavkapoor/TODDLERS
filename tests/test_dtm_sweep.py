@@ -21,6 +21,7 @@ def _args(**over):
         walltime="3-00:00:00", stab_walltime="12:00:00", toddlers_src="/data/toddlers_public/src",
         cloudy_exe="/data/cloudy/source/cloudy.exe", cloudy_data="/data/cloudy/data",
         python_module="SciPy-bundle/2024.05-gfbf-2024a", max_resume_rounds=10, activate_env="",
+        output_root="",
     )
     base.update(over)
     return argparse.Namespace(**base)
@@ -51,6 +52,17 @@ def test_activate_env_forwarded_with_newlines():
 def test_activate_env_omitted_when_empty():
     cmd = S._campaign_cmd(_args(activate_env=""), 1.0)
     assert "--activate-env" not in cmd
+
+
+def test_output_root_forwarded_when_set():
+    cmd = S._campaign_cmd(_args(output_root="/scratch/run"), 0.4)
+    assert "--output-root" in cmd
+    assert cmd[cmd.index("--output-root") + 1] == "/scratch/run"
+
+
+def test_output_root_omitted_when_empty():
+    cmd = S._campaign_cmd(_args(output_root=""), 0.4)
+    assert "--output-root" not in cmd
 
 
 def test_work_dir_uses_suffix_label():
