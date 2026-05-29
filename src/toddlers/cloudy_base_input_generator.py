@@ -8,6 +8,19 @@ from .stellar_feedback import StellarFeedback
 from .utils import generate_spectral_table_filename
 
 
+def resolve_small_to_large_ratio(override=None):
+    """Resolve the grain small-to-large mass ratio.
+
+    An explicit ``override`` wins; otherwise the ``TODDLERS_SMALL_TO_LARGE_RATIO`` env var
+    (set by the HPC campaign, e.g. 0.40 ISM-like for the v2-DTM grid); empty/unset falls back
+    to the package default ``SMALL_TO_LARGE_MASS_RATIO`` (0.10 Orion-like, the v2 value).
+    """
+    if override is not None:
+        return override
+    env = os.environ.get("TODDLERS_SMALL_TO_LARGE_RATIO")
+    return float(env) if env else SMALL_TO_LARGE_MASS_RATIO
+
+
 class BaseCloudyInputGenerator:
     """
     Base class for generating Cloudy input files.
@@ -82,7 +95,7 @@ class BaseCloudyInputGenerator:
 
     def initialize_parameters(self):
         self.abund_set_name = 'GASS10'
-        self.small_to_large_ratio = self._small_to_large_ratio_override if self._small_to_large_ratio_override is not None else SMALL_TO_LARGE_MASS_RATIO
+        self.small_to_large_ratio = resolve_small_to_large_ratio(self._small_to_large_ratio_override)
         self.Z = self.simulation_params.get("Z")
         self.eta_sf = float(self.simulation_params.get("eta_sf"))
         self.n_cl = float(self.simulation_params.get("n_cl"))

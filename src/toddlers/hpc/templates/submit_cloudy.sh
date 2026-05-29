@@ -34,6 +34,9 @@ export TODDLERS_DATA=@TODDLERS_DATA@
 # Cloudy: keep intermediates in node RAM, and pass the cluster's cloudy.exe.
 export TMPDIR=/dev/shm
 export CLOUDY_EXE=@CLOUDY_EXE@        # e.g. /data/gent/436/vsc43602/cloudy/source/cloudy.exe
+# Small-to-large grain mass ratio for the Cloudy grain distribution. Empty -> package default
+# (0.10, Orion-like, the v2 value); the campaign sets 0.40 (ISM-like) for the v2-DTM grid.
+export TODDLERS_SMALL_TO_LARGE_RATIO=@SMALL_TO_LARGE_RATIO@
 
 PHASE=${PHASE:?set PHASE=shell|unified|dig|dissolved via --export}
 # TASKFILE defaults to the full phase task list, but can be overridden (e.g. with a

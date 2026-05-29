@@ -175,6 +175,12 @@ def _submit_cloudy_chain(args, taskdir, after=None):
     repl["@TASKDIR@"] = str(taskdir)
     repl["@RESULTSDIR@"] = str(Path(args.work_dir) / "results")
     repl["@CLOUDY_EXE@"] = args.cloudy_exe
+    # Grain small-to-large ratio: empty string -> Cloudy generator uses its package default
+    # (0.10, Orion-like); set (e.g. 0.40 ISM-like) for the v2-DTM grid per the paper.
+    ratio = getattr(args, "small_to_large_ratio", None)
+    repl["@SMALL_TO_LARGE_RATIO@"] = "" if ratio is None else str(ratio)
+    if ratio is not None:
+        print(f"cloudy: small-to-large grain ratio = {ratio} (overrides the 0.10 default)")
     text = _fill_template(TEMPLATES_DIR / "submit_cloudy.sh", repl)
     script = _write_script(args.work_dir, "campaign_cloudy.sh", text)
 
@@ -500,6 +506,9 @@ def main(argv=None):
     # Cloudy options
     p.add_argument("--dust-to-metal", type=float, nargs="+", default=None,
                    help="DTM value(s). Omit = fiducial single run (no DTM axis); a list = DTM sweep (5D STAB).")
+    p.add_argument("--small-to-large-ratio", type=float, default=None,
+                   help="Cloudy grain small-to-large mass ratio. Omit = package default (0.10, "
+                        "Orion-like, the v2 value); set 0.40 (ISM-like) for the v2-DTM grid per the paper.")
     p.add_argument("--add-dig", action="store_true", help="include DIG models (default off; paper variable-DTM has none)")
     p.add_argument("--time-method", default="toddlers_v1",
                    choices=["adaptive", "uniform", "toddlers_v1"],
