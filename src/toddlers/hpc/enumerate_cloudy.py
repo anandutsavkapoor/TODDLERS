@@ -69,6 +69,11 @@ def enumerate_cloudy_tasks(evolution_files, method="adaptive", n_points=None,
                 logU_background=logU_background,
                 continue_after_dissolution=continue_after_dissolution,
                 complete_init=True,
+                # No per-cloud log file during enumeration: CloudyLogger opens a FileHandler per
+                # manager (unique logger name, never closed), so building one per .dat across a
+                # full grid (thousands) exhausts the open-file limit ([Errno 24]). Enumeration
+                # only reads parameters/time points, so the file logger is pure overhead here.
+                add_logger=False,
             )
         except Exception as exc:  # noqa: BLE001 - keep enumerating other files
             print(f"[enumerate] ERROR on {sim_file}: {exc}")
