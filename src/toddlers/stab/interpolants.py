@@ -24,6 +24,7 @@ from toddlers.track_simulation import load_output_file
 from toddlers.cloudy_timegrid_generator import TimeGridGenerator
 from toddlers.cloudy_output_handler import CloudyOutputHandler
 from toddlers.constants import *
+from toddlers.utils import dtm_label
 import argparse
 from .line_profiles import LineProfileGenerator
 from .config import INCLUDE_NEBULAR_CONTINUUM
@@ -235,8 +236,7 @@ class TODDLERSInterpolantGenerator:
         param_str = f"Z{Z:.3g}_eta{eta_sf:.3g}_n{n_cl:.1f}_logM{logM:.2f}"
 
         cloudy_dir_name = param_str
-        if dust_to_metal != 1.0:
-            cloudy_dir_name += f"_dtm{dust_to_metal:.2f}"
+        cloudy_dir_name += dtm_label(dust_to_metal)
 
         paths = {
             'evolution': self.evolution_dir / f"sim_{param_str}.dat",
@@ -326,8 +326,7 @@ class DataManager:
         """
         dtm = getattr(self.generator, "dust_to_metal", 1.0)
         param_str = f"Z{Z:.3g}_eta{eta_sf:.3g}_n{n_cl:.1f}_logM{logM:.2f}"
-        if dtm != 1.0:
-            param_str += f"_dtm{dtm:.2f}"
+        param_str += dtm_label(dtm)
         return self.cache_dir / f"{param_str}.pkl"
 
     def _load_cache_entry(self, cache_path, params, data_keys=None):
@@ -1931,7 +1930,7 @@ def main():
         model_prefix = f"{template}_{imf}_{star_type}"
 
     dtm = args.dust_to_metal
-    dtm_suffix = f"_dtm{dtm:.2f}" if dtm != 1.0 else ""
+    dtm_suffix = dtm_label(dtm)
 
     print(f"\nFound {len(sim_files)} simulation files in {evolution_dir}")
     print(f"Model prefix: {model_prefix}")

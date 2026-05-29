@@ -6,6 +6,7 @@ from enum import Enum
 from typing import Optional, Set
 import matplotlib.pyplot as plt
 from .config import *
+from ..utils import dtm_label
 from ..pts import storedtable as stab
 import sys
 import scipy.interpolate
@@ -80,7 +81,7 @@ class TODDLERSTimeSeriesStabGenerator:
         model_prefix = f"{self.stellar_template}_{self.imf}_{self.star_type}"
         _INTERPOLATOR_BASE = f"{model_prefix}_interp_tables"
         
-        dtm_suffix = f"_dtm{self.dust_to_metal:.2f}" if self.dust_to_metal != 1.0 else ""
+        dtm_suffix = dtm_label(self.dust_to_metal)
 
         if resolution == Resolution.HIGH:
             return Path(_INTERPOLATOR_BASE) / f"TODDLERS_tot_hr_{model_prefix}_lines_emergent={'False' if sed_type == SEDType.NODUST else 'True'}{dtm_suffix}.pkl"
@@ -121,8 +122,7 @@ class TODDLERSTimeSeriesStabGenerator:
         model_str = f"ToddlersCloudSEDFamily_{self.stellar_template}_{self.imf}_{self.star_type}"
         if sed_type == SEDType.NODUST:
             model_str += "_noDust"
-        if self.dust_to_metal != 1.0:
-            model_str += f"_dtm{self.dust_to_metal:.2f}"
+        model_str += dtm_label(self.dust_to_metal)
         return self.outdir_stab / f"{model_str}_{resolution.value}.stab"
         
     def extract_wavelength_grid(self, interpolator) -> np.ndarray:

@@ -29,14 +29,16 @@ def _cache_path(tmp_path, dtm):
 
 def test_distinct_dtm_gives_distinct_cache_paths(tmp_path):
     paths = {dtm: _cache_path(tmp_path, dtm)
-             for dtm in (0.02, 0.10, 0.20, 0.40, 0.60, 0.80, 1.0)}
+             for dtm in (0.001, 0.02, 0.10, 0.20, 0.40, 0.60, 0.80, 1.0)}
     # every DTM must map to a unique cache file -> no cross-DTM reuse
     assert len({str(p) for p in paths.values()}) == len(paths)
 
 
 def test_dtm_suffix_format_and_baseline(tmp_path):
-    # non-baseline carries the _dtmX.XX suffix; baseline (1.0) carries none
-    assert _cache_path(tmp_path, 0.20).name == "Z0.008_eta0.05_n80.0_logM6.25_dtm0.20.pkl"
+    # non-baseline carries a _dtm<val> suffix (general format, no spurious trailing zeros);
+    # baseline (1.0) carries none; small values stay distinct (1e-3 must NOT collapse to 0.00).
+    assert _cache_path(tmp_path, 0.20).name == "Z0.008_eta0.05_n80.0_logM6.25_dtm0.2.pkl"
+    assert _cache_path(tmp_path, 0.001).name == "Z0.008_eta0.05_n80.0_logM6.25_dtm0.001.pkl"
     assert _cache_path(tmp_path, 1.0).name == "Z0.008_eta0.05_n80.0_logM6.25.pkl"
 
 

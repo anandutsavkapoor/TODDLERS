@@ -12,6 +12,7 @@ from .shell_structure import ShellStructure
 from .lyman_alpha import LymanAlpha
 from .phase1 import Phase1
 from .fragmentation import Fragmentation
+from .utils import dtm_label
 from .phase2 import Phase2
 from .dissolution import Dissolution
 from .track_simulation import TrackSimulation
@@ -288,8 +289,7 @@ class Evolution:
             filename += f'_cover{self.post_sweep_covering_fraction:.2f}'
         if self.cluster_formation_mode == 'constant_sfr':
             filename += f'_tform{self.formation_timescale/MYR_TO_SEC:.1f}'
-        if self.dust_to_metal != 1.0:
-            filename += f'_dtm{self.dust_to_metal:.2f}'
+        filename += dtm_label(self.dust_to_metal)
 
         filename += '.dat'
         

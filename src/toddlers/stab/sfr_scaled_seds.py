@@ -10,6 +10,7 @@ import pickle
 from astropy import units as u
 from .sfr_scaling import SEDmanipulator, SimulationParameters
 from .config import *
+from ..utils import dtm_label
 
 class SEDGenerator:
     """Generate SFR-scaled SEDs across the TODDLERS parameter space.
@@ -76,8 +77,8 @@ class SEDGenerator:
     def _get_sed_filename(self, Z, eta, n_cl, dtm=None):
         """Construct SED output filename, optionally including DTM."""
         name = f"sed_sfr_scaled_{MODEL_PREFIX}_Z_{Z:.3f}_eta_{eta:.3f}_n_{n_cl:.1f}"
-        if dtm is not None and dtm != 1.0:
-            name += f"_dtm{dtm:.2f}"
+        if dtm is not None:
+            name += dtm_label(dtm)
         return self.output_dir / f"{name}.txt"
 
     def _get_interpolator_file(self, dtm=None):
@@ -85,7 +86,7 @@ class SEDGenerator:
         if dtm is None or dtm == 1.0:
             return self.interpolator_file
         base, ext = os.path.splitext(self.interpolator_file)
-        return f"{base}_dtm{dtm:.2f}{ext}"
+        return f"{base}{dtm_label(dtm)}{ext}"
 
     def process_parameter_combination(self, params):
         """Process a single parameter combination."""

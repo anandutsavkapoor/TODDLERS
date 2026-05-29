@@ -2,6 +2,25 @@ from .imports import np, shutil, solve_ivp, find_peaks, re, u, os, time, List, b
 from .constants import *
 
 
+def dtm_label(dtm):
+    """Filename suffix for a dust-to-metal value: '' at the fiducial 1.0, else '_dtm<val>'.
+
+    Uses a general (``:g``) format so small values are represented distinctly -- e.g.
+    1e-3 -> '_dtm0.001'. A fixed 2-decimal format collapses 1e-3 to '_dtm0.00' (i.e. 0.0),
+    which mislabels the model and breaks the log-scaled f_dust axis. Round-trips with parse_dtm.
+    """
+    return "" if abs(float(dtm) - 1.0) < 1e-9 else f"_dtm{float(dtm):g}"
+
+
+_DTM_RE = re.compile(r"_dtm(\d*\.?\d+(?:[eE][+-]?\d+)?)")
+
+
+def parse_dtm(name):
+    """Dust-to-metal value parsed from a filename / stem; 1.0 if there is no _dtm token."""
+    m = _DTM_RE.search(str(name))
+    return float(m.group(1)) if m else 1.0
+
+
 def generate_toddlers_banner():
     """Generates TODDLERS banner for logs etc."""
     banner = [

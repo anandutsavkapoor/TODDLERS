@@ -1,4 +1,5 @@
 from .imports import os, np, interp1d, subprocess, contextmanager
+from .utils import dtm_label
 from .cloudy_base_input_generator import BaseCloudyInputGenerator
 from .cloudy_shell_model_generator import ShellModelGenerator
 from .cloudy_unified_model_generator import UnifiedModelGenerator
@@ -146,8 +147,7 @@ class CloudySimulationManager:
         if params.get('dynamic_cloud_density', False):
             params_dir += "_dynDens"
 
-        if self.dust_to_metal != 1.0:
-            params_dir += f"_dtm{self.dust_to_metal:.2f}"
+        params_dir += dtm_label(self.dust_to_metal)
 
         self.cloudy_run_dir = os.path.join(
             self.results_dir, 

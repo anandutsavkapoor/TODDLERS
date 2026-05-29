@@ -5,6 +5,7 @@ import logging
 from enum import Enum
 from typing import Tuple, Dict, Optional, Set
 from .config import *
+from ..utils import dtm_label, parse_dtm
 import re
 
 class SEDType(Enum):
@@ -103,8 +104,8 @@ class TODDLERSStabGenerator:
     def get_sed_filename(self, folder: Path, Z: float, eta: float, n: float, dtm: float = None) -> Path:
         """Construct SED filename based on parameters."""
         name = f"sed_sfr_scaled_{self.stellar_template}_{self.imf}_{self.star_type}_Z_{Z:.3f}_eta_{eta:.3f}_n_{n:.1f}"
-        if dtm is not None and dtm != 1.0:
-            name += f"_dtm{dtm:.2f}"
+        if dtm is not None:
+            name += dtm_label(dtm)
         return folder / f"{name}.txt"
 
     def get_stab_filename(self, sed_type: SEDType, resolution: Resolution, has_dtm: bool = False) -> Path:
@@ -125,11 +126,7 @@ class TODDLERSStabGenerator:
         dtm_values = set()
         pattern = f"sed_sfr_scaled_{self.stellar_template}_{self.imf}_{self.star_type}_*.txt"
         for f in folder.glob(pattern):
-            match = re.search(r'_dtm(\d+\.\d+)', f.stem)
-            if match:
-                dtm_values.add(float(match.group(1)))
-            else:
-                dtm_values.add(1.0)
+            dtm_values.add(parse_dtm(f.stem))    # value if _dtm present, else 1.0
         return np.sort(np.array(list(dtm_values)))
             
     def create_sfr_scaled_stabs(self,
