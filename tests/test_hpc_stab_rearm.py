@@ -74,6 +74,24 @@ def test_keep_all_cache_no_clears(tmp_path):
     assert "[keep-interp-cache]" not in txt
 
 
+def test_resume_gate_unified_waits_on_shell_resume(tmp_path):
+    # On a resume round the gate must preserve unified's data dependency on shell: unified reads
+    # shell's .phy output, so unified-resume is submitted afterok:shell-resume. Otherwise it races
+    # shell-resume and KeyErrors on missing 'physical' (the 2026-05 Tier-2 pilot wasted a full
+    # unified phase: 7603/27483 fails). Dissolved is independent (peer of shell) and gets no dep.
+    txt, _ = _gen(tmp_path)
+    # the shell resume job id is captured, and reset before the per-phase loop
+    assert 'SHELL_RESUME_JID=""' in txt
+    assert '[ "$ph" = "shell" ] && SHELL_RESUME_JID="$JID"' in txt
+    # the dep flag is set ONLY for unified, and only once shell's resume id exists
+    assert ('DEP_FLAG=""; [ "$ph" = "unified" ] && [ -n "$SHELL_RESUME_JID" ] '
+            '&& DEP_FLAG="--dependency=afterok:$SHELL_RESUME_JID"') in txt
+    # the dep flag is actually threaded into the resume sbatch
+    assert "sbatch --parsable $DEP_FLAG" in txt
+    # the dependency is keyed on unified, never on dissolved
+    assert '"$ph" = "dissolved"' not in txt.split("DEP_FLAG")[1].split("\n")[0]
+
+
 def test_cache_dir_puts_cache_on_scratch(tmp_path):
     # --cache-dir <scratch> must export TODDLERS_INTERP_CACHE so the build cache lives there
     # (off the quota-limited code filesystem); default (no --cache-dir) exports nothing.

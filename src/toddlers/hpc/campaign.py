@@ -187,12 +187,21 @@ def _submit_cloudy_chain(args, taskdir, after=None):
 
     phases = [p for p in CLOUDY_PHASES if (p != "dig" or args.add_dig)]
     jobs = {}
-    # shell depends on evolution (if any); unified/dissolved depend on shell; dig on unified.
+    # Dependencies, by actual data dependency:
+    #   shell      -- needs evolution (`after`), no other Cloudy phase.
+    #   unified    -- reads shell's .phy density structure, must wait `afterok:shell`.
+    #   dissolved  -- reads only the evolution .dat (post-dissolution gas), NOT shell output;
+    #                 it's a peer of shell, so it shares shell's dependency (`after`) and runs
+    #                 in parallel with shell (validated by the 2026-05 Tier-2 pilot: dissolved
+    #                 completed cleanly while racing shell-resume).
+    #   dig        -- consumes the unified model's transmitted continuum, `afterok:unified`.
     for phase in phases:
         if phase == "shell":
             dep = after
-        elif phase in ("unified", "dissolved"):
+        elif phase == "unified":
             dep = jobs.get("shell")
+        elif phase == "dissolved":
+            dep = after                       # peer of shell, not a child
         else:  # dig
             dep = jobs.get("unified")
         taskfile = Path(taskdir) / f"cloudy_{phase}.tasks"
@@ -313,17 +322,26 @@ def _submit_postprocess(args, taskdir, after_jobs):
         'if [ "$ROUND" -eq 0 ] && [ "$BUILD_ROUND" -eq 0 ]; then rm -f "$STAB_DONE"; fi',
         'if [ -f "$STAB_DONE" ]; then echo "[stab] build already complete -> exit 0"; exit 0; fi',
         # ---- resume gate: ensure every Cloudy task is OK before building ----
+        # Preserve the first-round chain's data dependency on resume too: unified reads shell's
+        # .phy output, so when shell needs a resume round, unified-resume must wait
+        # `afterok:shell-resume` (else it KeyErrors on missing 'physical' from the unfinished
+        # shell models). Dissolved stays independent (peer of shell), matching its first-round
+        # dependency-free position. Without this, the 2026-05 Tier-2 pilot's first resume round
+        # wasted a full unified phase (7,603/27,483 KeyError fails) racing shell-resume.
         f"CORES={args.ntasks}; MAXNODES={args.max_nodes}",
         f'RESUME_DEP=""',
+        'SHELL_RESUME_JID=""',
         f'for ph in {phases}; do',
         f'  python3 -m toddlers.hpc.check_status --task-file "{taskdir}/cloudy_${{ph}}.tasks" '
         f'--results "{resdir}/cloudy_${{ph}}_*.results.*" -o "{taskdir}/cloudy_${{ph}}.resume.tasks" || true',
         f'  if [ -s "{taskdir}/cloudy_${{ph}}.resume.tasks" ]; then',
         f'    NT=$(wc -l < "{taskdir}/cloudy_${{ph}}.resume.tasks")',
         '    NODES=$(( (NT + CORES - 1) / CORES )); [ "$NODES" -lt 1 ] && NODES=1; [ "$NODES" -gt "$MAXNODES" ] && NODES=$MAXNODES',
-        f'    JID=$(sbatch --parsable --nodes=$NODES --ntasks=$((NODES*CORES)) '
+        '    DEP_FLAG=""; [ "$ph" = "unified" ] && [ -n "$SHELL_RESUME_JID" ] && DEP_FLAG="--dependency=afterok:$SHELL_RESUME_JID"',
+        f'    JID=$(sbatch --parsable $DEP_FLAG --nodes=$NODES --ntasks=$((NODES*CORES)) '
         f'--export=ALL,PHASE=${{ph}},TASKFILE={taskdir}/cloudy_${{ph}}.resume.tasks "{cloudy_sh}" | cut -d";" -f1)',
-        '    RESUME_DEP="${RESUME_DEP}:${JID}"; echo "[resume] $ph: $NT unfinished -> job $JID ($NODES node(s))"',
+        '    RESUME_DEP="${RESUME_DEP}:${JID}"; echo "[resume] $ph: $NT unfinished -> job $JID ($NODES node(s)) dep=$DEP_FLAG"',
+        '    [ "$ph" = "shell" ] && SHELL_RESUME_JID="$JID"',
         '  fi',
         'done',
         'if [ -n "$RESUME_DEP" ] && [ "$ROUND" -lt "$MAXROUND" ]; then',
