@@ -45,7 +45,7 @@ def overlapping_slices(new_f, ref_f, Z, sfe, ncl):
     nn, ng, nv, wl = load_stab(new_f)
     rn, rg, rv, _ = load_stab(ref_f)
     niZ, niS, niN = cell_indices(nn, ng, Z, sfe, ncl)
-    iD = nearest(ng[nn.index("DTM")], 1.0)
+    iD = nearest(ng[nn.index("f_dust" if "f_dust" in nn else "DTM")], 1.0)
     riZ = nearest(rg[rn.index("Z")], Z); riS = nearest(rg[rn.index("SFE")], sfe)
     riN = nearest(rg[rn.index("n_cl")], ncl)
     new = nv[0, :, niZ, niS, niN, iD]

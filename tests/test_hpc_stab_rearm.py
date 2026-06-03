@@ -30,7 +30,7 @@ def _gen(tmp_path, keep_interp_cache=False, cache_dir=""):
         account="acc", partition="part", ntasks=128, stab_walltime="06:00:00",
         work_dir=str(tmp_path), toddlers_src="/src", cloudy_exe="/cl.exe", cloudy_data="/cldata",
         python_module="SciPy", activate_env="", max_resume_rounds=3, max_nodes=8,
-        stab_dir=str(tmp_path / "stab"), dust_to_metal=[0.02, 0.1, 1.0], evolution_dir=evo,
+        stab_dir=str(tmp_path / "stab"), f_dust=[0.02, 0.1, 1.0], evolution_dir=evo,
         stab="both", archive_cloudy=True, keep_interp_cache=keep_interp_cache,
         cache_dir=cache_dir, output_root="", dry_run=True)
     campaign._submit_postprocess(args, tmp_path / "tasks",

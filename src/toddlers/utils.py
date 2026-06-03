@@ -2,22 +2,29 @@ from .imports import np, shutil, solve_ivp, find_peaks, re, u, os, time, List, b
 from .constants import *
 
 
-def dtm_label(dtm):
-    """Filename suffix for a dust-to-metal value: '' at the fiducial 1.0, else '_dtm<val>'.
+def f_dust_label(f_dust):
+    """Filename suffix for an f_dust value: '' at the fiducial 1.0, else '_fdust<val>'.
 
-    Uses a general (``:g``) format so small values are represented distinctly -- e.g.
-    1e-3 -> '_dtm0.001'. A fixed 2-decimal format collapses 1e-3 to '_dtm0.00' (i.e. 0.0),
-    which mislabels the model and breaks the log-scaled f_dust axis. Round-trips with parse_dtm.
+    f_dust is the dimensionless grain-abundance scaling factor (0-1) that multiplies the grain
+    abundance per H atom relative to solar; it is NOT the absolute dust-to-metal ratio (DTM,
+    = D/G / Z = 0.456 at solar when f_dust=1, v2). Uses a general (``:g``) format so small
+    values are represented distinctly -- e.g. 1e-3 -> '_fdust0.001'. A fixed 2-decimal format
+    collapses 1e-3 to '_fdust0.00' (i.e. 0.0), mislabeling the model and breaking the log-scaled
+    f_dust axis. Round-trips with parse_f_dust.
     """
-    return "" if abs(float(dtm) - 1.0) < 1e-9 else f"_dtm{float(dtm):g}"
+    return "" if abs(float(f_dust) - 1.0) < 1e-9 else f"_fdust{float(f_dust):g}"
 
 
-_DTM_RE = re.compile(r"_dtm(\d*\.?\d+(?:[eE][+-]?\d+)?)")
+_FDUST_RE = re.compile(r"_fdust(\d*\.?\d+(?:[eE][+-]?\d+)?)")
+# Legacy: older artifacts used a "_dtm<val>" suffix for the same f_dust value (the axis was
+# misnamed "DTM"). Read those too so pre-rename outputs remain parseable; we only ever WRITE
+# the "_fdust" form now.
+_LEGACY_DTM_RE = re.compile(r"_dtm(\d*\.?\d+(?:[eE][+-]?\d+)?)")
 
 
-def parse_dtm(name):
-    """Dust-to-metal value parsed from a filename / stem; 1.0 if there is no _dtm token."""
-    m = _DTM_RE.search(str(name))
+def parse_f_dust(name):
+    """f_dust value parsed from a filename / stem; 1.0 if there is no _fdust (or legacy _dtm) token."""
+    m = _FDUST_RE.search(str(name)) or _LEGACY_DTM_RE.search(str(name))
     return float(m.group(1)) if m else 1.0
 
 

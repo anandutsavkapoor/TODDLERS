@@ -5,7 +5,7 @@ import logging
 from enum import Enum
 from typing import Tuple, Dict, Optional, Set
 from .config import *
-from ..utils import dtm_label, parse_dtm
+from ..utils import f_dust_label, parse_f_dust
 import re
 
 class SEDType(Enum):
@@ -105,7 +105,7 @@ class TODDLERSStabGenerator:
         """Construct SED filename based on parameters."""
         name = f"sed_sfr_scaled_{self.stellar_template}_{self.imf}_{self.star_type}_Z_{Z:.3f}_eta_{eta:.3f}_n_{n:.1f}"
         if dtm is not None:
-            name += dtm_label(dtm)
+            name += f_dust_label(dtm)
         return folder / f"{name}.txt"
 
     def get_stab_filename(self, sed_type: SEDType, resolution: Resolution, has_dtm: bool = False) -> Path:
@@ -114,7 +114,7 @@ class TODDLERSStabGenerator:
         if sed_type == SEDType.NODUST:
             model_str += "_noDust"
         if has_dtm:
-            model_str += "_DTM"
+            model_str += "_fdust"
         return self.outdir_stab / f"{model_str}_{resolution.value}.stab"
 
     def discover_dtm_values(self, folder: Path) -> np.ndarray:
@@ -126,7 +126,7 @@ class TODDLERSStabGenerator:
         dtm_values = set()
         pattern = f"sed_sfr_scaled_{self.stellar_template}_{self.imf}_{self.star_type}_*.txt"
         for f in folder.glob(pattern):
-            dtm_values.add(parse_dtm(f.stem))    # value if _dtm present, else 1.0
+            dtm_values.add(parse_f_dust(f.stem))    # value if _dtm present, else 1.0
         return np.sort(np.array(list(dtm_values)))
             
     def create_sfr_scaled_stabs(self,
@@ -209,7 +209,7 @@ class TODDLERSStabGenerator:
                         self._log_grid_info(wl_grid, dtm_values, L_sed)
                         stab.writeStoredTable(
                             str(stab_file),
-                            ['lambda', 'Z', 'SFE', 'n_cl', 'DTM'],
+                            ['lambda', 'Z', 'SFE', 'n_cl', 'f_dust'],
                             ['m', '1', '1', '1/cm3', '1'],
                             ['log', 'log', 'lin', 'log', 'log'],
                             [wl_grid, self.Z, self.etaSF, self.n_cl, dtm_values],

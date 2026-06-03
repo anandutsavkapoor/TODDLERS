@@ -69,7 +69,7 @@ def main():
                                (axes[1], "_noDust_DTM_hr", "intrinsic (noDust)")):
         names, grids, values, wl = load_stab(f"{base}{variant}.stab")
         idx = cell_indices(names, grids, args.Z, args.sfe, args.ncl)
-        dtm = grids[names.index("DTM")]
+        dtm = grids[names.index("f_dust" if "f_dust" in names else "DTM")]
         label, _ = cell_label(grids, names, *idx)
         for i, (name, lam0) in enumerate(LINES.items()):
             c = line_peak_vs_dtm(values, wl, idx, lam0)

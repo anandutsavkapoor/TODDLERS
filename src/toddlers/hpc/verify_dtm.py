@@ -47,7 +47,7 @@ SEC_PER_MYR = 3.1557e13
 
 
 def _suffix(dtm):
-    return "" if abs(float(dtm) - 1.0) < 1e-9 else f"_dtm{float(dtm):g}"   # mirrors utils.dtm_label
+    return "" if abs(float(dtm) - 1.0) < 1e-9 else f"_fdust{float(dtm):g}"   # mirrors utils.f_dust_label
 
 
 def _paths(interp_dir, prefix, dtm):
@@ -231,7 +231,7 @@ def check_cloudy_truth(cloudy_output, dtm, sample):
     if s:
         dirs = [d for d in alldirs if s.strip("_") in d]
     else:
-        dirs = [d for d in alldirs if "_dtm" not in d]
+        dirs = [d for d in alldirs if "_fdust" not in d]
     conts = []
     for d in dirs:
         conts += glob.glob(f"{d}/*.cont")

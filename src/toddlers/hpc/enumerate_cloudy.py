@@ -38,11 +38,11 @@ def _models_to_run(sim_manager, t, has_dissolved, dissolution_time, add_dig,
 
 def enumerate_cloudy_tasks(evolution_files, method="adaptive", n_points=None,
                            add_dig=False, logU_background=None,
-                           continue_after_dissolution=False, dust_to_metal=None,
+                           continue_after_dissolution=False, f_dust=None,
                            verbose=True):
     """Yield Cloudy task dicts for the given evolution files.
 
-    ``dust_to_metal``: ``None`` reads the DTM from each evolution file's
+    ``f_dust``: ``None`` reads the DTM from each evolution file's
     simulation_params (self-consistent); a scalar or list sweeps explicit value(s).
 
     Each yielded dict carries ``stage='cloudy'`` plus the keys
@@ -50,12 +50,12 @@ def enumerate_cloudy_tasks(evolution_files, method="adaptive", n_points=None,
     """
     from ..cloudy_simulation_manager import CloudySimulationManager
 
-    if dust_to_metal is None:
+    if f_dust is None:
         dtm_values = None
-    elif isinstance(dust_to_metal, (list, tuple)):
-        dtm_values = list(dust_to_metal)
+    elif isinstance(f_dust, (list, tuple)):
+        dtm_values = list(f_dust)
     else:
-        dtm_values = [dust_to_metal]
+        dtm_values = [f_dust]
 
     n_files = len(evolution_files)
     for i, sim_file in enumerate(evolution_files, 1):
@@ -90,7 +90,11 @@ def enumerate_cloudy_tasks(evolution_files, method="adaptive", n_points=None,
                 break
         has_dissolved = dissolution_time is not None
 
-        file_dtm = sim_manager.simulation_params.get("dust_to_metal", 1.0)
+        # f_dust at which evolution was run (always 1.0 in practice; the f_dust sweep is a
+        # Cloudy-stage concept). Read the new "f_dust" key, falling back to the legacy
+        # "dust_to_metal" key in pre-rename .dat files.
+        file_dtm = sim_manager.simulation_params.get(
+            "f_dust", sim_manager.simulation_params.get("dust_to_metal", 1.0))
         dtm_list = [file_dtm] if dtm_values is None else dtm_values
 
         for t in sim_manager.get_time_points():
@@ -112,7 +116,7 @@ def enumerate_cloudy_tasks(evolution_files, method="adaptive", n_points=None,
                         "time": float(t),
                         "time_Myr": float(t) / MYR_TO_SEC,
                         "phase": phase,
-                        "dust_to_metal": float(dtm),
+                        "f_dust": float(dtm),
                         "add_dig": bool(add_dig),
                         "continue_after_dissolution": bool(continue_after_dissolution),
                     }

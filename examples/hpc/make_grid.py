@@ -7,7 +7,7 @@ JSON that ``toddlers.hpc.generate_tasks evolution`` expands, so the grid stays i
 sync with the STAB axes instead of being a hand-maintained static file.
 
 DTM is intentionally NOT an axis here: for the paper it is swept at the Cloudy
-stage (``generate_tasks cloudy --dust-to-metal ...``), so evolution runs once at
+stage (``generate_tasks cloudy --f-dust ...``), so evolution runs once at
 the fiducial DTM. See hpc/README.md.
 
 Usage:

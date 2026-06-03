@@ -6,7 +6,7 @@ from enum import Enum
 from typing import Optional, Set
 import matplotlib.pyplot as plt
 from .config import *
-from ..utils import dtm_label
+from ..utils import f_dust_label
 from ..pts import storedtable as stab
 import sys
 import scipy.interpolate
@@ -26,7 +26,7 @@ class Resolution(Enum):
 class TODDLERSTimeSeriesStabGenerator:
     """Generates STAB files for SKIRT from TODDLERS SED data, without SFR normalization."""
     
-    def __init__(self, out_base_dir: Path = None, num_time_steps: int = None, dust_to_metal: float = 1.0):
+    def __init__(self, out_base_dir: Path = None, num_time_steps: int = None, f_dust: float = 1.0):
         """
         Initialize the generator.
         
@@ -34,7 +34,7 @@ class TODDLERSTimeSeriesStabGenerator:
             out_base_dir: Base output directory (defaults to current directory)
             num_time_steps: Number of time steps to include in the output (default: None = use all time steps)
         """
-        self.dust_to_metal = dust_to_metal
+        self.f_dust = f_dust
         self.out_base_dir = Path(out_base_dir) if out_base_dir else Path("")
         self.outdir_stab = self.out_base_dir / "cloud_family_stab_output"
         self.outdir_stab.mkdir(parents=True, exist_ok=True)
@@ -81,7 +81,7 @@ class TODDLERSTimeSeriesStabGenerator:
         model_prefix = f"{self.stellar_template}_{self.imf}_{self.star_type}"
         _INTERPOLATOR_BASE = f"{model_prefix}_interp_tables"
         
-        dtm_suffix = dtm_label(self.dust_to_metal)
+        dtm_suffix = f_dust_label(self.f_dust)
 
         if resolution == Resolution.HIGH:
             return Path(_INTERPOLATOR_BASE) / f"TODDLERS_tot_hr_{model_prefix}_lines_emergent={'False' if sed_type == SEDType.NODUST else 'True'}{dtm_suffix}.pkl"
@@ -122,7 +122,7 @@ class TODDLERSTimeSeriesStabGenerator:
         model_str = f"ToddlersCloudSEDFamily_{self.stellar_template}_{self.imf}_{self.star_type}"
         if sed_type == SEDType.NODUST:
             model_str += "_noDust"
-        model_str += dtm_label(self.dust_to_metal)
+        model_str += f_dust_label(self.f_dust)
         return self.outdir_stab / f"{model_str}_{resolution.value}.stab"
         
     def extract_wavelength_grid(self, interpolator) -> np.ndarray:

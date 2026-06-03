@@ -12,7 +12,7 @@ from .shell_structure import ShellStructure
 from .lyman_alpha import LymanAlpha
 from .phase1 import Phase1
 from .fragmentation import Fragmentation
-from .utils import dtm_label
+from .utils import f_dust_label
 from .phase2 import Phase2
 from .dissolution import Dissolution
 from .track_simulation import TrackSimulation
@@ -76,7 +76,7 @@ class Evolution:
                 post_sweep_covering_fraction=COVERING_FRACTION_DEF, dark_matter_fraction=0.0,
                 use_Tion_model=False, skip_logger_init=False, init_with_fragmentation=False,
                 include_gravity=True, include_lyman_alpha=True,
-                include_external_pressure=True, dust_to_metal=1.0):
+                include_external_pressure=True, f_dust=1.0):
         """
         Initialize the Evolution object.
 
@@ -119,7 +119,7 @@ class Evolution:
                 pressure contribution. UV+IR radiation is unaffected.
             include_external_pressure (bool, optional): If False, disables the external
                 cloud/ISM pressure force on the shell.
-            dust_to_metal (float, optional): Dust-to-metal mass ratio normalized to solar.
+            f_dust (float, optional): Dust-to-metal mass ratio normalized to solar.
                 Scales sigma_dust, kappa_IR, and Lyman-alpha dust opacity. Defaults to 1.0.
 
         Raises:
@@ -132,7 +132,7 @@ class Evolution:
         self.M_cl_init = M_cl_init
         self.dark_matter_fraction = dark_matter_fraction
         self.M_dm = dark_matter_fraction * self.M_cl_init
-        self.dust_to_metal = dust_to_metal
+        self.f_dust = f_dust
         self.template = template
         self.cluster_formation_mode = cluster_formation_mode
         self.formation_timescale = formation_timescale
@@ -216,8 +216,8 @@ class Evolution:
             self.logger.info("Lyman-alpha radiation force is DISABLED")
         if not self.include_external_pressure:
             self.logger.info("External pressure force is DISABLED")
-        if self.dust_to_metal != 1.0:
-            self.logger.info(f"Dust-to-metal ratio (scaled by solar): {self.dust_to_metal:.2f}")
+        if self.f_dust != 1.0:
+            self.logger.info(f"Dust-to-metal ratio (scaled by solar): {self.f_dust:.2f}")
         if self.init_with_fragmentation:
             self.logger.info("SIMULATION CONFIGURED TO START DIRECTLY IN FRAGMENTATION PHASE")
 
@@ -233,7 +233,7 @@ class Evolution:
             imf=self.imf, star_type=self.star_type
         )
         
-        self.lyman_alpha = LymanAlpha(Z, T_NEUTRAL, dust_to_metal_relative_to_solar=self.dust_to_metal)
+        self.lyman_alpha = LymanAlpha(Z, T_NEUTRAL, f_dust=self.f_dust)
         self.initialize_parameters()
         self.initialize_others()
         self.initialize_density_profile()
@@ -289,7 +289,7 @@ class Evolution:
             filename += f'_cover{self.post_sweep_covering_fraction:.2f}'
         if self.cluster_formation_mode == 'constant_sfr':
             filename += f'_tform{self.formation_timescale/MYR_TO_SEC:.1f}'
-        filename += dtm_label(self.dust_to_metal)
+        filename += f_dust_label(self.f_dust)
 
         filename += '.dat'
         
@@ -333,8 +333,8 @@ class Evolution:
         self.M_cl = self.M_cl_init * (1 - self.eta_sf)
         self.P_ext_ISM = (MU_N / MU_P) * N_ISM * K_BOLTZMANN * T_ION
         self.tau_recomb = 1 / (self.n_cl * ALPHA_B)
-        self.sigma_dust = self.dust_to_metal * SIGMA_DUST_SOLAR * (self.Z / Z_SOLAR)
-        self.kappa_IR = self.dust_to_metal * KAPPA_IR_SOLAR * (self.Z / Z_SOLAR)
+        self.sigma_dust = self.f_dust * SIGMA_DUST_SOLAR * (self.Z / Z_SOLAR)
+        self.kappa_IR = self.f_dust * KAPPA_IR_SOLAR * (self.Z / Z_SOLAR)
 
     def initialize_others(self):
         self.f_esc_i_cloud = 0. 
@@ -691,7 +691,7 @@ class Evolution:
                 "cluster_formation_mode": self.cluster_formation_mode,
                 "dark_matter_fraction": getattr(self, "dark_matter_fraction", 0.0),
                 "dark_matter_mass": f"{getattr(self, 'M_dm', 0.0)/M_SUN:.2e} Msun",
-                "dust_to_metal": self.dust_to_metal,
+                "f_dust": self.f_dust,
             }
 
             self.tracker.write_output_file(self.output_path, simulation_params, self.all_results, self.logger)

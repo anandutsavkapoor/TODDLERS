@@ -23,7 +23,7 @@ def test_enumeration_builds_managers_without_file_logger(monkeypatch):
         def __init__(self, sim_file, **kw):
             seen_kwargs.append(kw)
             self.all_results = []                       # no dissolution transition
-            self.simulation_params = {"dust_to_metal": 1.0}
+            self.simulation_params = {"f_dust": 1.0}
 
         def get_time_points(self):
             return []                                   # no time points -> no task rows needed

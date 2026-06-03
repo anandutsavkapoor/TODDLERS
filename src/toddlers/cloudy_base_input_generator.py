@@ -51,7 +51,7 @@ class BaseCloudyInputGenerator:
         get_speedup_options(): Generates commands for speeding up Cloudy simulations.
     """
 
-    def __init__(self, simulation_params, t_list_collapse, dissolution_time, interpolants, cloudy_run_dir, speedup=False, logger=None, dust_to_metal=1.0, small_to_large_ratio=None):
+    def __init__(self, simulation_params, t_list_collapse, dissolution_time, interpolants, cloudy_run_dir, speedup=False, logger=None, f_dust=1.0, small_to_large_ratio=None):
         """
         Initialize the BaseCloudyInputGenerator.
 
@@ -71,7 +71,7 @@ class BaseCloudyInputGenerator:
                 self.shell_mass_interp, self.cloud_mass_interp, self.is_within_cloud_interp, self.covering_fraction_interp = interpolants
         self.cloudy_run_dir = cloudy_run_dir
         self.speedup = speedup
-        self.dust_to_metal = dust_to_metal
+        self.f_dust = f_dust
         self._small_to_large_ratio_override = small_to_large_ratio
 
         # Initialize generators and parameters
@@ -249,7 +249,7 @@ class BaseCloudyInputGenerator:
         """
         Generate grain-related Cloudy commands using CloudyGrainsGenerator.
 
-        The dust_to_metal factor scales all grain abundances (silicate, graphite,
+        The f_dust factor scales all grain abundances (silicate, graphite,
         PAH) relative to solar.
 
         Args:
@@ -261,7 +261,7 @@ class BaseCloudyInputGenerator:
                 and optionally PAHs.
         """
         return self.grains_generator.generate_grain_commands(
-            metallicity_scaling=self.dust_to_metal * self.Z / Z_SOLAR_GASS10,
+            metallicity_scaling=self.f_dust * self.Z / Z_SOLAR_GASS10,
             silicate_ratio=self.small_to_large_ratio,
             graphite_ratio=self.small_to_large_ratio,
             skip_pah=skip_pah

@@ -1,5 +1,5 @@
 from .imports import os, np, interp1d, subprocess, contextmanager
-from .utils import dtm_label, resolve_output_root
+from .utils import f_dust_label, resolve_output_root
 from .cloudy_base_input_generator import BaseCloudyInputGenerator
 from .cloudy_shell_model_generator import ShellModelGenerator
 from .cloudy_unified_model_generator import UnifiedModelGenerator
@@ -32,7 +32,7 @@ class CloudySimulationManager:
 
     def __init__(self, sim_out_file, method='toddlers_v1', n_points=None, add_DIG=True, DIG_density=None,
                 logU_background=None, continue_after_dissolution=False, complete_init=True, add_logger=True,
-                dust_to_metal=1.0, small_to_large_ratio=None):
+                f_dust=1.0, small_to_large_ratio=None):
         """
         Initializes the CloudySimulationManager.
 
@@ -51,7 +51,7 @@ class CloudySimulationManager:
         self.sim_out_file = sim_out_file
         self.cloudy_exec = CLOUDY_EXE
         self.add_logger = add_logger
-        self.dust_to_metal = dust_to_metal
+        self.f_dust = f_dust
         self.small_to_large_ratio = small_to_large_ratio
 
         self.simulation_params, self.all_results = load_output_file(self.sim_out_file)
@@ -122,7 +122,7 @@ class CloudySimulationManager:
                 dissolution_time=self.dissolution_time,
                 interpolants=interpolants,
                 cloudy_run_dir=self.cloudy_run_dir, logger=self.logger,
-                dust_to_metal=self.dust_to_metal,
+                f_dust=self.f_dust,
                 small_to_large_ratio=self.small_to_large_ratio
             )
 
@@ -149,7 +149,7 @@ class CloudySimulationManager:
         if params.get('dynamic_cloud_density', False):
             params_dir += "_dynDens"
 
-        params_dir += dtm_label(self.dust_to_metal)
+        params_dir += f_dust_label(self.f_dust)
 
         self.cloudy_run_dir = os.path.join(
             self.results_dir, 

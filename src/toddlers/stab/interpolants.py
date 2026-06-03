@@ -24,7 +24,7 @@ from toddlers.track_simulation import load_output_file
 from toddlers.cloudy_timegrid_generator import TimeGridGenerator
 from toddlers.cloudy_output_handler import CloudyOutputHandler
 from toddlers.constants import *
-from toddlers.utils import dtm_label, resolve_output_root
+from toddlers.utils import f_dust_label, resolve_output_root
 import argparse
 from .line_profiles import LineProfileGenerator
 from .config import INCLUDE_NEBULAR_CONTINUUM
@@ -53,21 +53,21 @@ class TODDLERSInterpolantGenerator:
     and Cloudy outputs. Automatically determines all paths from evolution directory.
     """
     @handle_error
-    def __init__(self, evolution_dir, dust_to_metal=1.0):
+    def __init__(self, evolution_dir, f_dust=1.0):
         """
         Initialize generator with evolution directory path.
 
         Args:
             evolution_dir (str|Path): Full path to evolution output directory containing
                                     template_X/imf_Y/star_type_Z/... structure
-            dust_to_metal (float): Dust-to-metal scaling factor relative to solar.
+            f_dust (float): Dust-to-metal scaling factor relative to solar.
                 This multiplicative factor scales the grain abundance per hydrogen
                 atom in the Cloudy input (1.0 = full dust, 0.5 = half). It is
                 Z-independent and should not be confused with D/G divided by Z.
                 When != 1.0, Cloudy output directories are expected to have a
                 _dtmX.XX suffix. Defaults to 1.0.
         """
-        self.dust_to_metal = dust_to_metal
+        self.f_dust = f_dust
         self.evolution_dir = Path(evolution_dir)
         if not self.evolution_dir.exists():
             raise RuntimeError(f"Evolution directory not found: {self.evolution_dir}")
@@ -210,7 +210,7 @@ class TODDLERSInterpolantGenerator:
                 for key, values in param_space.items()}
 
     @handle_error
-    def get_paths_for_params(self, Z, eta_sf, n_cl, logM, dust_to_metal=None):
+    def get_paths_for_params(self, Z, eta_sf, n_cl, logM, f_dust=None):
         """
         Get paths to relevant files for a specific parameter set.
 
@@ -219,7 +219,7 @@ class TODDLERSInterpolantGenerator:
             eta_sf (float): Star formation efficiency
             n_cl (float): Cloud number density
             logM (float): Log of cloud mass
-            dust_to_metal (float): Dust-to-metal ratio relative to solar.
+            f_dust (float): Dust-to-metal ratio relative to solar.
                 Appends _dtmX.XX to Cloudy directory name when != 1.0.
 
         Returns:
@@ -232,13 +232,13 @@ class TODDLERSInterpolantGenerator:
         if Z <= 0 or eta_sf <= 0 or n_cl <= 0:
             raise ValueError(f"Invalid parameter values: Z={Z}, eta_sf={eta_sf}, n_cl={n_cl}")
 
-        if dust_to_metal is None:
-            dust_to_metal = self.dust_to_metal
+        if f_dust is None:
+            f_dust = self.f_dust
 
         param_str = f"Z{Z:.3g}_eta{eta_sf:.3g}_n{n_cl:.1f}_logM{logM:.2f}"
 
         cloudy_dir_name = param_str
-        cloudy_dir_name += dtm_label(dust_to_metal)
+        cloudy_dir_name += f_dust_label(f_dust)
 
         paths = {
             'evolution': self.evolution_dir / f"sim_{param_str}.dat",
@@ -326,9 +326,9 @@ class DataManager:
         all per-DTM interpolants come out identical (the DTM axis is degenerate).
         DTM=1.0 carries no suffix, matching the no-suffix baseline Cloudy dirs.
         """
-        dtm = getattr(self.generator, "dust_to_metal", 1.0)
+        dtm = getattr(self.generator, "f_dust", 1.0)
         param_str = f"Z{Z:.3g}_eta{eta_sf:.3g}_n{n_cl:.1f}_logM{logM:.2f}"
-        param_str += dtm_label(dtm)
+        param_str += f_dust_label(dtm)
         return self.cache_dir / f"{param_str}.pkl"
 
     def _load_cache_entry(self, cache_path, params, data_keys=None):
@@ -1896,7 +1896,7 @@ def main():
                       help='Directory containing evolution simulation .dat files')
     parser.add_argument('--output-dir', type=str, required=True,
                       help='Directory to save interpolants')
-    parser.add_argument('--dust-to-metal', type=float, default=1.0,
+    parser.add_argument('--f-dust', type=float, default=1.0,
                       help='Dust-to-metal ratio relative to solar (default: 1.0)')
 
     args = parser.parse_args()
@@ -1931,14 +1931,14 @@ def main():
     else:
         model_prefix = f"{template}_{imf}_{star_type}"
 
-    dtm = args.dust_to_metal
-    dtm_suffix = dtm_label(dtm)
+    dtm = args.f_dust
+    dtm_suffix = f_dust_label(dtm)
 
     print(f"\nFound {len(sim_files)} simulation files in {evolution_dir}")
     print(f"Model prefix: {model_prefix}")
     print(f"Dust-to-metal ratio: {dtm}")
     print("\nInitializing interpolant generator...")
-    generator = TODDLERSInterpolantGenerator(evolution_dir, dust_to_metal=dtm)
+    generator = TODDLERSInterpolantGenerator(evolution_dir, f_dust=dtm)
 
     # Create output directory
     output_dir.mkdir(parents=True, exist_ok=True)

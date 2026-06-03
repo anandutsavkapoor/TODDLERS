@@ -10,7 +10,7 @@ import pickle
 from astropy import units as u
 from .sfr_scaling import SEDmanipulator, SimulationParameters
 from .config import *
-from ..utils import dtm_label
+from ..utils import f_dust_label
 
 class SEDGenerator:
     """Generate SFR-scaled SEDs across the TODDLERS parameter space.
@@ -18,17 +18,17 @@ class SEDGenerator:
     Args:
         output_dir: Directory for SED output files.
         max_workers: Maximum parallel workers. Auto-determined from memory if None.
-        dust_to_metal_values: List of DTM scaling factors for a dust sweep. Each
+        f_dust_values: List of DTM scaling factors for a dust sweep. Each
             value is a multiplicative factor applied to the grain abundance per
             hydrogen atom (1.0 = full dust, 0.5 = half). This is Z-independent
             and should not be confused with D/G divided by Z.
         interpolator_file: Path to the SED interpolator file.
     """
-    def __init__(self, output_dir=SED_OUTPUT_DIR, max_workers=None, dust_to_metal_values=None,
+    def __init__(self, output_dir=SED_OUTPUT_DIR, max_workers=None, f_dust_values=None,
                  interpolator_file=None):
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        self.dust_to_metal_values = dust_to_metal_values
+        self.f_dust_values = f_dust_values
         self.interpolator_file = interpolator_file or SED_INTERPOLATOR_FILE
             
         # Determine resolution from output directory
@@ -78,7 +78,7 @@ class SEDGenerator:
         """Construct SED output filename, optionally including DTM."""
         name = f"sed_sfr_scaled_{MODEL_PREFIX}_Z_{Z:.3f}_eta_{eta:.3f}_n_{n_cl:.1f}"
         if dtm is not None:
-            name += dtm_label(dtm)
+            name += f_dust_label(dtm)
         return self.output_dir / f"{name}.txt"
 
     def _get_interpolator_file(self, dtm=None):
@@ -86,7 +86,7 @@ class SEDGenerator:
         if dtm is None or dtm == 1.0:
             return self.interpolator_file
         base, ext = os.path.splitext(self.interpolator_file)
-        return f"{base}{dtm_label(dtm)}{ext}"
+        return f"{base}{f_dust_label(dtm)}{ext}"
 
     def process_parameter_combination(self, params):
         """Process a single parameter combination."""
@@ -145,13 +145,13 @@ class SEDGenerator:
 
     def generate_all_seds(self):
         """Generate SEDs for all parameter combinations, including DTM if specified."""
-        if self.dust_to_metal_values is not None:
+        if self.f_dust_values is not None:
             parameter_combinations = [
                 (Z, eta, n_cl, dtm)
                 for Z in METALLICITIES
                 for eta in STAR_FORMATION_EFFICIENCIES
                 for n_cl in CLOUD_DENSITIES
-                for dtm in self.dust_to_metal_values
+                for dtm in self.f_dust_values
             ]
         else:
             parameter_combinations = [
@@ -185,7 +185,7 @@ class SEDGenerator:
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description='Generate SFR-scaled SEDs')
-    parser.add_argument('--dust-to-metal', type=float, nargs='+', default=None,
+    parser.add_argument('--f-dust', type=float, nargs='+', default=None,
                       help='DTM value(s) for sweep. If omitted, no DTM axis.')
     parser.add_argument('--sed-type', type=str, choices=['Dust', 'noDust'], default=None,
                       help='SED type. Overrides names_and_constants.py if given.')
@@ -216,7 +216,7 @@ if __name__ == "__main__":
     generator = SEDGenerator(
         output_dir=output_dir,
         max_workers=args.max_workers,
-        dust_to_metal_values=args.dust_to_metal,
+        f_dust_values=args.f_dust,
         interpolator_file=interp_file
     )
     generator.generate_all_seds()

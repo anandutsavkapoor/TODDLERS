@@ -13,9 +13,9 @@ the STABs.
 
 Dust-to-metal is **optional**, which selects the two standard campaigns:
 
-* **omit ``--dust-to-metal``**  -> a single fiducial-DTM run, no DTM axis (the standard
+* **omit ``--f-dust``**  -> a single fiducial-DTM run, no DTM axis (the standard
   STAB campaign).
-* **``--dust-to-metal 0.02 0.10 0.20 0.40 0.60 0.80 1.00``** -> the Cloudy DTM sweep that
+* **``--f-dust 0.02 0.10 0.20 0.40 0.60 0.80 1.00``** -> the Cloudy DTM sweep that
   produces the 5D (DTM-axis) SFR-normalised STAB (the paper's variable-DTM run).
 
 The Cloudy time grid defaults to ``toddlers_v1`` (the grid the SED interpolant requires);
@@ -34,7 +34,7 @@ Start from existing evolution runs, fiducial DTM, both STAB families::
 
 Variable-DTM (paper), preview the SLURM plan first::
 
-    python -m toddlers.hpc.campaign ... --dust-to-metal 0.02 0.10 0.20 0.40 0.60 0.80 1.00 --dry-run
+    python -m toddlers.hpc.campaign ... --f-dust 0.02 0.10 0.20 0.40 0.60 0.80 1.00 --dry-run
 
 Run it on the cluster's login node (it calls ``sbatch``). Use ``--dry-run`` to print the
 exact ``generate_tasks`` and ``sbatch`` commands without submitting anything.
@@ -152,8 +152,8 @@ def _gen_cloudy_tasks(args):
         cmd.append("--no-continue-after-dissolution")
     if args.add_dig:
         cmd.append("--add-dig")
-    if args.dust_to_metal:
-        cmd += ["--dust-to-metal"] + [str(d) for d in args.dust_to_metal]
+    if args.f_dust:
+        cmd += ["--f-dust"] + [str(d) for d in args.f_dust]
     _run(cmd, dry_run=args.dry_run)
     return out
 
@@ -259,7 +259,7 @@ def _submit_postprocess(args, taskdir, after_jobs):
     gate simply resumes its leftover tasks. For a DTM sweep the interpolant is built per DTM.
     """
     dep = ":".join(j for j in after_jobs.values() if j and j != "DRYRUN") or None
-    dtms = args.dust_to_metal or [1.0]
+    dtms = args.f_dust or [1.0]
     resdir = Path(args.work_dir) / "results"
     self_path = Path(args.work_dir) / "campaign_stab.sh"
     cloudy_sh = Path(args.work_dir) / "campaign_cloudy.sh"
@@ -286,7 +286,7 @@ def _submit_postprocess(args, taskdir, after_jobs):
     # The v2-DTM SEDs include the unattenuated diffuse nebular continuum in the noDust
     # variant (paper Appendix B); enable it when running a DTM sweep. Requires the
     # patched Cloudy (cloudy_patches/) so ".diffContUnatt" carries the DiffContUnatt column.
-    neb_export = "export TODDLERS_STAB_NEBULAR_CONT=1" if args.dust_to_metal else ""
+    neb_export = "export TODDLERS_STAB_NEBULAR_CONT=1" if args.f_dust else ""
     # Put the (large, transient) interpolant cache on scratch when --cache-dir is given, so it
     # does not consume the code/home-filesystem quota on a big DTM sweep (TODDLERS_INTERP_CACHE
     # is read by interpolants.DataManager; the build's CACHE_DIR resolves the same way).
@@ -398,7 +398,7 @@ def _submit_postprocess(args, taskdir, after_jobs):
             block.append(clear_cache)        # DELETE ALL: clear before each DTM (bound + drop stale)
         block.append(
             f"python3 -m toddlers.stab.interpolants --evolution-dir {evo_dir_abs} "
-            f"--output-dir ${{PREFIX}}_interp_tables --dust-to-metal {dtm}")
+            f"--output-dir ${{PREFIX}}_interp_tables --f-dust {dtm}")
         lines += block
     if not args.keep_interp_cache:
         lines.append(clear_cache)            # DELETE ALL: final clear so nothing (incl. the last DTM) persists
@@ -412,8 +412,8 @@ def _submit_postprocess(args, taskdir, after_jobs):
         # paramspace resampler (one invocation per SED type x resolution). This stage must
         # run before toddlers.stab.sfr_normalized_stab, which otherwise finds no folders and
         # writes nothing. For a DTM sweep, all DTM values are passed so the SEDs carry _dtm suffixes.
-        dtm_flag = (" --dust-to-metal " + " ".join(str(d) for d in args.dust_to_metal)
-                    if args.dust_to_metal else "")
+        dtm_flag = (" --f-dust " + " ".join(str(d) for d in args.f_dust)
+                    if args.f_dust else "")
         lines.append('echo "=== resampling SFR-scaled SEDs (Dust/noDust x lr/hr) ==="')
         for st in ("Dust", "noDust"):
             for res in ("lr", "hr"):
@@ -477,8 +477,8 @@ def _stage2_argv(args, leaf):
         a += ["--output-root", args.output_root]
     if args.toddlers_data:
         a += ["--toddlers-data", args.toddlers_data]
-    if args.dust_to_metal:
-        a += ["--dust-to-metal"] + [str(d) for d in args.dust_to_metal]
+    if args.f_dust:
+        a += ["--f-dust"] + [str(d) for d in args.f_dust]
     if args.add_dig:
         a += ["--add-dig"]
     if not args.continue_after_dissolution:
@@ -531,7 +531,7 @@ def main(argv=None):
     p.add_argument("--pattern", default="*.dat", help="glob for evolution .dat (cloudy stage)")
 
     # Cloudy options
-    p.add_argument("--dust-to-metal", type=float, nargs="+", default=None,
+    p.add_argument("--f-dust", type=float, nargs="+", default=None,
                    help="DTM value(s). Omit = fiducial single run (no DTM axis); a list = DTM sweep (5D STAB).")
     p.add_argument("--small-to-large-ratio", type=float, default=None,
                    help="Cloudy grain small-to-large mass ratio. Omit = package default (0.10, "

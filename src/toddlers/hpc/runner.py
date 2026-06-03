@@ -24,7 +24,7 @@ from ..constants import M_SUN, MYR_TO_SEC
 # the legacy evolution_runner.
 _EVOLUTION_PASSTHROUGH = (
     "Z", "eta_sf", "n_cl", "template", "imf", "star_type", "profile_type",
-    "cluster_formation_mode", "formation_timescale", "dust_to_metal",
+    "cluster_formation_mode", "formation_timescale", "f_dust",
     "dynamic_cloud_density", "add_cover_frac", "post_sweep_covering_fraction",
 )
 
@@ -85,7 +85,7 @@ def run_cloudy_task(row: dict, cloudy_exe: str = None):
     Expected keys: ``sim_file``, ``time`` (seconds), ``phase`` in
     {shell, unified, dig, dissolved}. Optional: ``inner_prefix`` (required for the
     ``dig`` phase), ``add_dig``, ``logU_background``, ``continue_after_dissolution``,
-    ``dust_to_metal``, ``force_regenerate``.
+    ``f_dust``, ``force_regenerate``.
 
     ``cloudy_exe`` overrides the executable path (the cluster's cloudy.exe); when
     omitted the package default (``cloudy.exe`` on PATH) is used.
@@ -121,7 +121,7 @@ def run_cloudy_task(row: dict, cloudy_exe: str = None):
         continue_after_dissolution=bool(row.get("continue_after_dissolution", False)),
         complete_init=True,
         add_logger=False,
-        dust_to_metal=float(row.get("dust_to_metal", 1.0)),
+        f_dust=float(row.get("f_dust", 1.0)),
     )
     if cloudy_exe:
         sim_manager.cloudy_exec = cloudy_exe

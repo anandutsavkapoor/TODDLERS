@@ -31,7 +31,7 @@ WL_LO, WL_HI = 0.1, 3000.0
 def slices(filepath, Z, sfe, ncl):
     names, grids, values, wl = load_stab(filepath)
     iZ, iS, iN = cell_indices(names, grids, Z, sfe, ncl)
-    dtm = grids[names.index("DTM")]
+    dtm = grids[names.index("f_dust" if "f_dust" in names else "DTM")]
     seds = values[0, :, iZ, iS, iN, :]            # (lambda, DTM)
     label, _ = cell_label(grids, names, iZ, iS, iN)
     return wl, dtm, seds, label

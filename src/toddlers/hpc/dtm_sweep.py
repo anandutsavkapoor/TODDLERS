@@ -34,7 +34,7 @@ DONE_NAME = ".dtm_sweep_done"              # written by this coordinator when th
 
 
 def _suffix(dtm):
-    return "" if abs(float(dtm) - 1.0) < 1e-9 else f"_dtm{float(dtm):g}"   # mirrors utils.dtm_label
+    return "" if abs(float(dtm) - 1.0) < 1e-9 else f"_fdust{float(dtm):g}"   # mirrors utils.f_dust_label
 
 
 def _log(args, msg):
@@ -66,7 +66,7 @@ def _cloudy_dirs(args, dtm):
         if s:
             if s.strip("_") in base:                 # e.g. "dtm0.80" in the model-dir name
                 out.append(d)
-        elif "_dtm" not in base:                     # DTM=1.0: model dirs with no _dtm token
+        elif "_fdust" not in base:                     # DTM=1.0: model dirs with no _dtm token
             out.append(d)
     return out
 
@@ -100,7 +100,7 @@ def _campaign_cmd(args, dtm):
     work = os.path.join(args.work_root, f"dtm{_suffix(dtm) or '1.00'}")
     cmd = [sys.executable, "-m", "toddlers.hpc.campaign",
            "--evolution-dir", args.evolution_dir,
-           "--dust-to-metal", str(dtm),
+           "--f-dust", str(dtm),
            "--small-to-large-ratio", str(args.small_to_large_ratio),
            "--stab", "none",
            "--work-dir", work,
@@ -179,7 +179,7 @@ def delete_cloudy(args, dtm):
 
 def final_assembly(args):
     interp = os.path.join(args.stab_dir, f"{args.prefix}_interp_tables")
-    dtm_flag = ["--dust-to-metal"] + [str(d) for d in sorted(args.dtms)]
+    dtm_flag = ["--f-dust"] + [str(d) for d in sorted(args.dtms)]
     _log(args, "final assembly: recollapse data + resample + 5D SFR-normalized STAB")
     # recollapse data (run-specific; regenerated here, just before STAB generation)
     _run(args, [sys.executable, "-m", "toddlers.stab.recollapse"])

@@ -82,8 +82,8 @@ def main():
         names = d["axisNames"]; grids = [np.asarray(g) for g in d["axisGrids"]]
         scales = d.get("axisScales"); qscale = d.get("quantityScales", ["log"])[0]
         wl = grids[names.index("lambda")] * 1e6
-        dtm = grids[names.index("DTM")]
-        dtm_scale = scales[names.index("DTM")] if scales else "log"
+        dtm = grids[names.index("f_dust" if "f_dust" in names else "DTM")]
+        dtm_scale = scales[names.index("f_dust" if "f_dust" in names else "DTM")] if scales else "log"
         xf, tq, fq = _interp_funcs(dtm_scale, qscale)
         V = np.asarray(d["values"])[0]    # (lambda, Z, SFE, n_cl, DTM)
         Zs, Ss, Ns = grids[names.index("Z")], grids[names.index("SFE")], grids[names.index("n_cl")]
@@ -135,8 +135,8 @@ def main():
     names = d["axisNames"]; grids = [np.asarray(g) for g in d["axisGrids"]]
     scales = d.get("axisScales"); qscale = d.get("quantityScales", ["log"])[0]
     wl = grids[names.index("lambda")] * 1e6
-    dtm = grids[names.index("DTM")]
-    xf, tq, fq = _interp_funcs(scales[names.index("DTM")] if scales else "log", qscale)
+    dtm = grids[names.index("f_dust" if "f_dust" in names else "DTM")]
+    xf, tq, fq = _interp_funcs(scales[names.index("f_dust" if "f_dust" in names else "DTM")] if scales else "log", qscale)
     vals = np.asarray(d["values"])[0, :, worst_off["iZ"], worst_off["iS"], worst_off["iN"], :]
     rec4 = reconstruct(vals, dtm, keep4, xf, tq, fq, wl)
     # among the dropped points, find the one whose error in the worst band is largest (for the zoom)

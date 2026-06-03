@@ -85,7 +85,7 @@ def main():
     Zs   = gr_d[nm_d.index("Z")]
     sfes = gr_d[nm_d.index("SFE")]
     ns   = gr_d[nm_d.index("n_cl")]
-    dtms = gr_d[nm_d.index("DTM")]
+    dtms = gr_d[nm_d.index("f_dust" if "f_dust" in nm_d else "DTM")]
     i_fid = nearest(dtms, 1.0)
     print(f"# Tier-1 STAB cube: Z={list(Zs)}  SFE={list(sfes)}  n_cl={list(ns)}  DTM={list(dtms)}")
     print(f"# MIR band: {WL_LO}-{WL_HI} micron; fiducial DTM = {dtms[i_fid]:g}")

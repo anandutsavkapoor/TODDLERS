@@ -34,7 +34,7 @@ def _run_main(tmp_path, output_root):
     work = tmp_path / "work"
     argv = [
         "--evolution-dir", str(evo), "--work-dir", str(work), "--stab-dir", str(tmp_path / "stab"),
-        "--dust-to-metal", "1.0", "--stab", "none",
+        "--f-dust", "1.0", "--stab", "none",
         "--account", "acc", "--partition", "doduo",
         "--toddlers-src", "/src", "--cloudy-exe", "/cl.exe", "--cloudy-data", "/d",
         "--python-module", "SciPy", "--dry-run",

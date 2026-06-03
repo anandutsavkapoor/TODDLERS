@@ -20,7 +20,7 @@ Examples
     python -m toddlers.hpc.generate_tasks evolution --grid grid.json -o tasks
     # STAB production (default time grid is 'toddlers_v1', as the interpolant requires):
     python -m toddlers.hpc.generate_tasks cloudy --input-dir evolution_output \
-        --pattern '*.dat' -o tasks --dust-to-metal 0.02 0.10 0.20 0.40 0.60 0.80 1.00
+        --pattern '*.dat' -o tasks --f-dust 0.02 0.10 0.20 0.40 0.60 0.80 1.00
 """
 import argparse
 import glob
@@ -75,12 +75,12 @@ def cmd_cloudy(args):
         sys.exit(f"No files matching '{args.pattern}' under {args.input_dir}")
     print(f"Found {len(files)} evolution output files")
 
-    dtm = args.dust_to_metal  # None -> auto per file; list -> sweep
+    dtm = args.f_dust  # None -> auto per file; list -> sweep
     tasks = enumerate_cloudy_tasks(
         files, method=args.method, n_points=args.n_points, add_dig=args.add_dig,
         logU_background=args.logU_background,
         continue_after_dissolution=args.continue_after_dissolution,
-        dust_to_metal=dtm, verbose=True,
+        f_dust=dtm, verbose=True,
     )
 
     # Bucket by phase so each phase becomes a separately submittable (dependent) file.
@@ -132,7 +132,7 @@ def build_parser():
                     help="run models past shell dissolution (default on; the STAB "
                          "interpolant grid spans the full time range, so keep this on for "
                          "STAB production. Use --no-continue-after-dissolution otherwise).")
-    pc.add_argument("--dust-to-metal", type=float, nargs="+", default=None,
+    pc.add_argument("--f-dust", type=float, nargs="+", default=None,
                     help="DTM value(s) to sweep; omit to read each file's own value")
     pc.set_defaults(func=cmd_cloudy)
     return p

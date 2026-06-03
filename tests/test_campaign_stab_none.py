@@ -23,7 +23,7 @@ def _run_main(tmp_path, stab):
     work = tmp_path / "work"
     campaign.main([
         "--evolution-dir", str(evo), "--work-dir", str(work), "--stab-dir", str(tmp_path / "stab"),
-        "--dust-to-metal", "1.0", "--stab", stab,
+        "--f-dust", "1.0", "--stab", stab,
         "--account", "acc", "--partition", "doduo",
         "--toddlers-src", "/src", "--cloudy-exe", "/cl.exe", "--cloudy-data", "/d",
         "--python-module", "SciPy", "--dry-run",

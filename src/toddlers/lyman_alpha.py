@@ -29,7 +29,7 @@ class LymanAlpha:
         Lyalpha_radiationPressure_fudgeFactor (float): Overall calibration factor
     """
     
-    def __init__(self, Z, T_sh_atm, dust_to_metal_relative_to_solar=1):
+    def __init__(self, Z, T_sh_atm, f_dust=1):
         """
         Initialize Lyman alpha radiation pressure calculations.
         Dust cross-section have been scaled by Z/Z_solar in init itself,
@@ -39,12 +39,12 @@ class LymanAlpha:
         Args:
             Z (float): Gas metallicity in solar units 
             T_sh_atm (float): Gas temperature in K
-            dust_to_metal_relative_to_solar (float, optional): Dust-to-metal mass ratio 
+            f_dust (float, optional): Dust-to-metal mass ratio 
                 normalized to solar. Defaults to 1.
         """
         self.Z = Z
         self.T_sh_atm = T_sh_atm
-        self.f_dm = dust_to_metal_relative_to_solar
+        self.f_dm = f_dust
         self.sigma_dust = SIGMA_DUST_SOLAR * (Z / Z_SOLAR) # absorption cross section, not extinction
         self.sigma_dust_ext = self.sigma_dust / (1 - DUST_ALBEDO) # already scaled with Z, modify kimm's eqn accordingly
         self.sigma_Lya = 5.88e-14 / np.sqrt(self.T_sh_atm / 1e4)

@@ -34,7 +34,7 @@ def _pairs(cmd):
 def test_single_dtm_campaign_shape():
     cmd = S._campaign_cmd(_args(), 0.1)
     p = _pairs(cmd)
-    assert p["--dust-to-metal"] == "0.1"
+    assert p["--f-dust"] == "0.1"
     assert p["--stab"] == "none"
     assert p["--small-to-large-ratio"] == "0.4"
     assert p["--evolution-dir"] == "/scratch/evo"
@@ -67,5 +67,5 @@ def test_output_root_omitted_when_empty():
 
 def test_work_dir_uses_suffix_label():
     # 1e-3 must not collapse; DTM=1.0 gets the literal '1.00' work-dir tag
-    assert S._suffix(0.001) == "_dtm0.001"
+    assert S._suffix(0.001) == "_fdust0.001"
     assert S._suffix(1.0) == ""
