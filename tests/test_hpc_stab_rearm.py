@@ -92,6 +92,40 @@ def test_resume_gate_unified_waits_on_shell_resume(tmp_path):
     assert '"$ph" = "dissolved"' not in txt.split("DEP_FLAG")[1].split("\n")[0]
 
 
+def test_no_resubmit_after_max_rounds(tmp_path):
+    # Once resume rounds are exhausted the gate must STOP submitting resume jobs. Before the
+    # fix, build-mode gates kept spawning fresh 24h worker-pool jobs (the 2026-06 pilot stacked
+    # 4 redundant 96-core shell-resume jobs grinding the same deterministic failures).
+    txt, _ = _gen(tmp_path)
+    # the per-phase loop bails on resubmission at/after max rounds, BEFORE the resume sbatch
+    assert 'if [ "$ROUND" -ge "$MAXROUND" ]; then' in txt
+    assert "NOT resubmitting" in txt
+    guard = txt.index('if [ "$ROUND" -ge "$MAXROUND" ]; then')
+    submit = txt.index("--export=ALL,PHASE=${ph},TASKFILE=")
+    assert guard < submit, "max-round guard must precede the resume sbatch"
+
+
+def test_resume_workers_sized_to_task_count(tmp_path):
+    # Resume jobs must not reserve more cores than there are tasks (an 11-task resume set on a
+    # 96-core node otherwise idles 85 cores for the whole walltime).
+    txt, _ = _gen(tmp_path)
+    assert 'NTASKS=$((NODES*CORES)); [ "$NT" -lt "$NTASKS" ] && NTASKS=$NT' in txt
+    assert "--ntasks=$NTASKS" in txt
+    assert "--ntasks=$((NODES*CORES))" not in txt   # the old, work-blind sizing is gone
+
+
+def test_refuse_to_build_with_holes(tmp_path):
+    # At max rounds with failures still present, building a STAB with holes is pointless (SKIRT
+    # rejects it) and would only loop the build self-re-arm. The gate must fail loud instead.
+    txt, _ = _gen(tmp_path)
+    assert 'if [ -n "$LEFTOVER" ]; then' in txt
+    assert "refusing to build a STAB with holes" in txt
+    # the hard-fail guard precedes the build (sentinel write) so holes never reach a build
+    assert txt.index('if [ -n "$LEFTOVER" ]; then echo "[resume] ERROR') < txt.index('touch "$STAB_DONE"')
+    # the old silent "building with available models" fallback is gone
+    assert "building with available models" not in txt
+
+
 def test_cache_dir_puts_cache_on_scratch(tmp_path):
     # --cache-dir <scratch> must export TODDLERS_INTERP_CACHE so the build cache lives there
     # (off the quota-limited code filesystem); default (no --cache-dir) exports nothing.

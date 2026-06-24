@@ -174,9 +174,17 @@ def run_cloudy_task(row: dict, cloudy_exe: str = None):
             except CalledProcessError:
                 if not auto_repair or attempt >= max_attempts or not os.path.exists(out_path):
                     raise
+                # Classify against the WHOLE .out, not a tail. Cloudy prints the
+                # diagnostic (e.g. the zone-cap warning "Calculation stopped because
+                # default number of zones reached") at the end of the failing iteration,
+                # but then dumps the full final-iteration per-zone element tables after
+                # it -- thousands of lines -- so the signature sits far from EOF (observed
+                # ~3000 lines back in an 8026-line shell .out). A tail misses it and the
+                # model fails unrepaired. The terminal aborts (ConvFail/DISASTER) are still
+                # matched wherever they fall; reading the whole file only runs on a failure.
                 with open(out_path, errors="ignore") as f:
-                    out_tail = "".join(f.readlines()[-120:])
-                err = classifier.classify_error(out_tail)
+                    out_text = f.read()
+                err = classifier.classify_error(out_text)
                 if err is None or not err.solution:
                     raise  # unknown / no auto-fix -> manual review
                 with open(in_path, errors="ignore") as f:

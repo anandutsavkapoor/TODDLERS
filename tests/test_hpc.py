@@ -115,6 +115,8 @@ def test_classifier_matches_known_failures():
     c = CloudyErrorClassifier()
     cases = {
         "ConvFail aborts since nTotalFailures=10 is >= LimFail=10": "Convergence Failure",
+        "PROBLEM  ConvFail 1,  ionization not converged iteration 2 zone 1360": "Zone Non-Convergence",
+        "DISASTER - A floating point exception occurred. Bailing out...": "Floating Point Exception",
         "PROBLEM DISASTER the kinetic temperature is below the lower limit": "Temperature Too Low",
         "ABORT DISASTER nPres2Ioniz exceeds limPres2Ioniz here": "Pressure Ionization Limit",
         "Calculation stopped because default number of zones reached": "Zone Limit Reached",
@@ -124,6 +126,35 @@ def test_classifier_matches_known_failures():
         assert err is not None and err.name == name
 
 
+def test_zone_grind_outranks_zone_limit():
+    # A grinder that hits the zone cap WITH per-zone non-convergence in the tail
+    # must be routed to turbulence (root cause), not to "more zones" (symptom).
+    c = CloudyErrorClassifier()
+    tail = (
+        "PROBLEM  ConvFail 5,  ionization not converged iteration 2 zone 2798\n"
+        "Calculation stopped because default number of zones reached\n"
+        "Cloudy ends: 2800 zones, 3 iterations, 2 warnings\n"
+    )
+    err = c.classify_error(tail)
+    assert err is not None and err.name == "Zone Non-Convergence"
+    assert err.modification_function == "add_turbulence_pressure"
+
+
+def test_buried_zone_warning_needs_whole_out():
+    # Regression: Cloudy prints the zone-cap warning, THEN dumps the final-iteration
+    # per-zone element tables (thousands of lines), so the signature sits far from EOF
+    # (observed ~3000 lines back in an 8026-line shell .out). The classifier must see the
+    # whole .out -- runner.py reads f.read(), not a tail -- or the model fails unrepaired.
+    c = CloudyErrorClassifier()
+    out = ("Calculation stopped because default number of zones reached\n"
+           + "Iron 1.80 2.44 3.76\n" * 3000
+           + "Cloudy ends: 2800 zones, 3 iterations, 2 warnings\n"
+           + "[Stop in cdMain at maincl.cpp:593, something went wrong]\n")
+    assert c.classify_error(out).name == "Zone Limit Reached"      # whole-file: found
+    tail = "".join(out.splitlines(keepends=True)[-200:])
+    assert c.classify_error(tail) is None                          # 200-line tail: missed
+
+
 def test_classifier_unknown_needs_manual_review():
     c = CloudyErrorClassifier()
     assert c.classify_error("some unrecognised cloudy chatter") is None
@@ -131,19 +162,35 @@ def test_classifier_unknown_needs_manual_review():
     assert c.requires_manual_review("ConvFail aborts since nTotalFailures=9 is >= LimFail=9") is False
 
 
-def test_modifier_turbulence_boosts_only_at_high_density():
+def test_modifier_turbulence_floor_then_escalate():
+    # Density-independent now: failing models sit at log n_H ~ 2.2-2.8. A tiny
+    # input value is lifted to the floor on the first repair, then escalated;
+    # the trailing "no pressure" is dropped so turbulent pressure is active.
     m = CloudyInputModifier()
     c = CloudyErrorClassifier()
     err = c.classify_error("ConvFail aborts since nTotalFailures=9 is >= LimFail=9")
-    hi = "hden 4.0\nturbulence 3.0 km/sec no pressure\n"   # log nH 4.0 >= 3.5 -> boost x5
-    lo = "hden 2.0\nturbulence 3.0 km/sec no pressure\n"   # below threshold -> unchanged velocity
-    out_hi, _ = m.modify_input(hi, err)
-    out_lo, _ = m.modify_input(lo, err)
-    assert "turbulence 15.0" in out_hi
-    assert "turbulence 3.0" in out_lo
+    first, _ = m.modify_input("hden 2.8\nturbulence 0.103077 km/sec no pressure\n", err)
+    assert "turbulence 1.500000 km/sec" in first
+    assert "no pressure" not in first
+    second, _ = m.modify_input(first, err)        # escalate x2 from the floor
+    assert "turbulence 3.000000 km/sec" in second
+
+
+def test_modifier_turbulence_clamped_then_noop():
+    # Escalation is clamped at the ceiling, and once there the rewrite is a
+    # no-op so the caller gives up cleanly instead of escalating forever.
+    m = CloudyInputModifier()
+    c = CloudyErrorClassifier()
+    err = c.classify_error("ConvFail aborts since nTotalFailures=9 is >= LimFail=9")
+    at_ceiling = f"turbulence {m.TURBULENCE_CEILING * 0.75:.6f} km/sec\n"  # x2 -> over ceiling
+    clamped, _ = m.modify_input(at_ceiling, err)
+    assert f"turbulence {m.TURBULENCE_CEILING:.6f} km/sec" in clamped
+    again, _ = m.modify_input(clamped, err)       # already at ceiling -> identical text
+    assert again == clamped
 
 
 def test_modifier_increase_zones_bounded():
     m = CloudyInputModifier()
     assert "set nend 1200" in m.increase_zones("set nend 800\n")
-    assert "set nend 5000" in m.increase_zones("set nend 4000\n")  # capped at 5000
+    assert "set nend 6000" in m.increase_zones("set nend 4000\n")   # x1.5, below ceiling
+    assert "set nend 12000" in m.increase_zones("set nend 9000\n")  # capped at 12000

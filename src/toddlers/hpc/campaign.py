@@ -331,25 +331,38 @@ def _submit_postprocess(args, taskdir, after_jobs):
         f"CORES={args.ntasks}; MAXNODES={args.max_nodes}",
         f'RESUME_DEP=""',
         'SHELL_RESUME_JID=""',
+        'LEFTOVER=""',
         f'for ph in {phases}; do',
         f'  python3 -m toddlers.hpc.check_status --task-file "{taskdir}/cloudy_${{ph}}.tasks" '
         f'--results "{resdir}/cloudy_${{ph}}_*.results.*" -o "{taskdir}/cloudy_${{ph}}.resume.tasks" || true',
-        f'  if [ -s "{taskdir}/cloudy_${{ph}}.resume.tasks" ]; then',
-        f'    NT=$(wc -l < "{taskdir}/cloudy_${{ph}}.resume.tasks")',
-        '    NODES=$(( (NT + CORES - 1) / CORES )); [ "$NODES" -lt 1 ] && NODES=1; [ "$NODES" -gt "$MAXNODES" ] && NODES=$MAXNODES',
-        '    DEP_FLAG=""; [ "$ph" = "unified" ] && [ -n "$SHELL_RESUME_JID" ] && DEP_FLAG="--dependency=afterok:$SHELL_RESUME_JID"',
-        f'    JID=$(sbatch --parsable $DEP_FLAG --nodes=$NODES --ntasks=$((NODES*CORES)) '
+        f'  if [ ! -s "{taskdir}/cloudy_${{ph}}.resume.tasks" ]; then continue; fi',
+        f'  NT=$(wc -l < "{taskdir}/cloudy_${{ph}}.resume.tasks")',
+        '  LEFTOVER=1',
+        # Once the resume rounds are exhausted, STOP submitting. The leftover failures are
+        # deterministic, so re-running them just stacks redundant worker-pool jobs: each
+        # build-mode gate was (wrongly) still submitting a fresh 24h resume job AND re-arming
+        # afterany the gate (which finishes in seconds), not afterany the resume job, so the
+        # resume jobs piled up many-deep. Report and let the post-loop guard decide.
+        '  if [ "$ROUND" -ge "$MAXROUND" ]; then echo "[resume] $ph: $NT still unfinished at max rounds; NOT resubmitting"; continue; fi',
+        '  NODES=$(( (NT + CORES - 1) / CORES )); [ "$NODES" -lt 1 ] && NODES=1; [ "$NODES" -gt "$MAXNODES" ] && NODES=$MAXNODES',
+        # Size workers to the work: never reserve more cores than there are tasks. An 11-task
+        # resume set on a 96-core node otherwise idles 85 cores for the entire walltime.
+        '  NTASKS=$((NODES*CORES)); [ "$NT" -lt "$NTASKS" ] && NTASKS=$NT',
+        '  DEP_FLAG=""; [ "$ph" = "unified" ] && [ -n "$SHELL_RESUME_JID" ] && DEP_FLAG="--dependency=afterok:$SHELL_RESUME_JID"',
+        f'  JID=$(sbatch --parsable $DEP_FLAG --nodes=$NODES --ntasks=$NTASKS '
         f'--export=ALL,PHASE=${{ph}},TASKFILE={taskdir}/cloudy_${{ph}}.resume.tasks "{cloudy_sh}" | cut -d";" -f1)',
-        '    RESUME_DEP="${RESUME_DEP}:${JID}"; echo "[resume] $ph: $NT unfinished -> job $JID ($NODES node(s)) dep=$DEP_FLAG"',
-        '    [ "$ph" = "shell" ] && SHELL_RESUME_JID="$JID"',
-        '  fi',
+        '  RESUME_DEP="${RESUME_DEP}:${JID}"; echo "[resume] $ph: $NT unfinished -> job $JID ($NODES node(s), $NTASKS task(s)) dep=$DEP_FLAG"',
+        '  [ "$ph" = "shell" ] && SHELL_RESUME_JID="$JID"',
         'done',
-        'if [ -n "$RESUME_DEP" ] && [ "$ROUND" -lt "$MAXROUND" ]; then',
+        'if [ -n "$RESUME_DEP" ]; then',
         '  echo "[resume] round $ROUND incomplete; re-arming gate afterany$RESUME_DEP"',
         f'  sbatch --dependency=afterany${{RESUME_DEP}} --export=ALL,ROUND=$((ROUND+1)) "{self_path}"',
         '  exit 0',
         'fi',
-        '[ -n "$RESUME_DEP" ] && echo "[resume] WARNING: still incomplete after $MAXROUND rounds; building with available models"',
+        # Resume rounds exhausted with failures still present: a STAB with holes is rejected by
+        # SKIRT, so building is pointless and the build self-re-arm below would only loop. Fail
+        # loud for human intervention rather than silently producing an unusable partial library.
+        'if [ -n "$LEFTOVER" ]; then echo "[resume] ERROR: still incomplete after $MAXROUND rounds; refusing to build a STAB with holes -- human intervention needed."; exit 1; fi',
         # ---- self-re-arm the BUILD (survives walltime; successor no-ops once STAB_DONE) ----
         # Armed here (cwd still the job WorkDir, before the cd into stab_dir) so the relative
         # self_path resolves. The successor continues a timed-out build; on a finished build it
