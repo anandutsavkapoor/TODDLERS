@@ -2,12 +2,12 @@
 #
 # The two TODDLERS -> SKIRT STAB campaigns behind the paper, as runnable commands.
 # Both use the same driver (`python -m toddlers.hpc.campaign`); they differ only in where
-# evolution comes from and whether the Cloudy stage sweeps the dust-to-metal ratio.
+# evolution comes from and whether the Cloudy stage sweeps f_dust.
 #
 #   1) Grid-from-scratch (production): generate a BPASS chab100 grid, then evolution -> Cloudy
-#      -> STAB in one dependent chain (fiducial DTM, no DTM axis).
-#   2) Active variable-DTM sweep: start from the evolution produced by (1) and sweep DTM at
-#      the Cloudy stage, scaled across nodes -> the paper's 5D DTM-axis SFR-normalised STAB.
+#      -> STAB in one dependent chain (fiducial f_dust, no f_dust axis).
+#   2) Active variable-f_dust sweep: start from the evolution produced by (1) and sweep f_dust at
+#      the Cloudy stage, scaled across nodes -> the paper's 5D f_dust-axis SFR-normalised STAB.
 #
 # SAFE BY DEFAULT: runs with --dry-run, so it only PRINTS the generate_tasks/sbatch commands
 # and submits nothing. Edit the CONFIG block for your cluster, then set DRYRUN="" to submit.
@@ -28,7 +28,7 @@ MAX_NODES=8                                    # cap on nodes a phase scales acr
 DRYRUN="--dry-run"                             # set DRYRUN="" to actually submit
 # ---------------------------------------------------------------------------------
 
-DTM_AXIS="0.02 0.10 0.20 0.40 0.60 0.80 1.00"
+FDUST_AXIS="0.02 0.10 0.20 0.40 0.60 0.80 1.00"
 
 common_args=(
   --work-dir runs_chab100 --stab-dir examples/stab
@@ -45,12 +45,12 @@ common_args=(
 #       Z x eta x n x M combination into it.
 #   (2) --evolution-dir DISCOVERS runs: it globs '*.dat' in this leaf and reads the Z/SFE/n
 #       from the filenames (and the population from the path) -- it does not run evolution.
-# So (1) computes the dynamics once and (2) sweeps DTM at the Cloudy stage on that output;
+# So (1) computes the dynamics once and (2) sweeps f_dust at the Cloudy stage on that output;
 # keep this leaf consistent with the grid above.
 EVO_LEAF="$TODDLERS_SRC/evolution_output/template_BPASS/imf_chab100/star_type_bin/cluster_mode_burst/profile_type_uniform"
 
 echo "############################################################"
-echo "# 1) Grid-from-scratch: BPASS chab100 grid, evolution -> Cloudy -> STAB (fiducial DTM)"
+echo "# 1) Grid-from-scratch: BPASS chab100 grid, evolution -> Cloudy -> STAB (fiducial f_dust)"
 echo "############################################################"
 # Small demo grid (examples/hpc/bpass_chab100_grid.json, 16 runs). For the full production
 # grid, regenerate the JSON from toddlers.stab.config with make_grid.py (BPASS template).
@@ -60,14 +60,14 @@ python -m toddlers.hpc.campaign \
 
 echo
 echo "############################################################"
-echo "# 2) Active campaign: variable-DTM sweep on the SAME evolution -> 5D SFR-norm STAB"
+echo "# 2) Active campaign: variable-f_dust sweep on the SAME evolution -> 5D SFR-norm STAB"
 echo "############################################################"
-# Starts from the evolution produced by (1); sweeps DTM only at the Cloudy stage (the shell
+# Starts from the evolution produced by (1); sweeps f_dust only at the Cloudy stage (the shell
 # dynamics are computed once and reused). --max-nodes spreads the large Cloudy grid for
 # wall-clock speed at the same CPU-hours.
 python -m toddlers.hpc.campaign \
   --evolution-dir "$EVO_LEAF" \
-  --dust-to-metal $DTM_AXIS \
+  --f-dust $FDUST_AXIS \
   "${common_args[@]}" $DRYRUN
 
 echo

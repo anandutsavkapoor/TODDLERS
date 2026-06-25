@@ -41,7 +41,7 @@ converted to SKIRT's `m` / `W/m` on write).
 python -m toddlers.stab.interpolants \
     --evolution-dir <evolution_output>/template_<T>/imf_<I>/star_type_<S>/cluster_mode_burst/profile_type_uniform \
     --output-dir    ${MODEL_PREFIX}_interp_tables \
-    --dust-to-metal 1.0
+    --f-dust 1.0
 mkdir -p hdf5 && cp ${MODEL_PREFIX}_interp_tables/recollapse_data.h5 hdf5/recollapse_data_${MODEL_PREFIX}.hdf5
 ```
 Reads the evolution `.dat` and their Cloudy `.cont`/`.phy` output, builds the 6D
@@ -53,9 +53,9 @@ renames the recollapse file to the path the SFR stage expects.)
 python -m toddlers.stab.cloud_family_stab     # -> cloud_family_stab_output/*.stab
 ```
 
-**Stage 2b — SFR-normalized STAB** (SFR-weighted recollapse family, 4D / 5D-with-DTM)
+**Stage 2b — SFR-normalized STAB** (SFR-weighted recollapse family, 4D / 5D-with-f_dust)
 First resample the interpolant into SFR-scaled SED grids (one folder per SED type x
-resolution); for a DTM sweep pass all DTM values so the SEDs carry `_dtm` suffixes:
+resolution); for a f_dust sweep pass all f_dust values so the SEDs carry `_fdust` suffixes:
 ```bash
 for st in Dust noDust; do for res in lr hr; do
     python -m toddlers.stab.sfr_scaled_seds --sed-type $st --resolution $res

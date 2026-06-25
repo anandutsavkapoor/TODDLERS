@@ -26,7 +26,7 @@ echo "=== Stage 1: SED interpolant + recollapse data ==="
 python -m toddlers.stab.interpolants \
     --evolution-dir "$EVO" \
     --output-dir "${PREFIX}_interp_tables" \
-    --dust-to-metal 1.0
+    --f-dust 1.0
 mkdir -p hdf5
 cp "${PREFIX}_interp_tables/recollapse_data.h5" "hdf5/recollapse_data_${PREFIX}.hdf5"
 

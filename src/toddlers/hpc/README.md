@@ -109,45 +109,45 @@ reruns it in place, up to `max_repair_attempts` times (default 2; set
 production grid from accumulating permanent failures on issues that a small input
 tweak resolves.
 
-## Example: the variable-DTM campaign
+## Example: the variable-f_dust campaign
 
 This is the paper's variable dust-to-metal campaign: a
-grid of evolution runs at the **fiducial** DTM, then Cloudy post-processing that
-**sweeps DTM** (the dust-to-metal scaling enters only the Cloudy grain abundances, so
+grid of evolution runs at the **fiducial** f_dust, then Cloudy post-processing that
+**sweeps f_dust** (the dust-to-metal scaling enters only the Cloudy grain abundances, so
 the shell dynamics are computed once and reused). DIG is **not** included.
 
 ```bash
-# 1) evolution grid at fiducial DTM (no DTM axis). ~2500 runs for the paper axes.
+# 1) evolution grid at fiducial f_dust (no f_dust axis). ~2500 runs for the paper axes.
 python -m toddlers.hpc.generate_tasks evolution \
     --grid examples/hpc/sb99_2023_grid.json -o tasks
 sbatch submit_evolution.sh                       # worker pool, resume as needed
 
-# 2) Cloudy (no DIG) sweeping DTM. One Cloudy task per (sim, timepoint, DTM);
-#    each DTM lands in its own `..._dtm<value>` run directory, so they never collide.
+# 2) Cloudy (no DIG) sweeping f_dust. One Cloudy task per (sim, timepoint, f_dust);
+#    each f_dust lands in its own `..._fdust<value>` run directory, so they never collide.
 python -m toddlers.hpc.generate_tasks cloudy \
     --input-dir evolution_output --pattern '*.dat' -o tasks \
-    --dust-to-metal 0.02 0.10 0.20 0.40 0.60 0.80 1.00
+    --f-dust 0.02 0.10 0.20 0.40 0.60 0.80 1.00
 #    -> tasks/cloudy_shell.tasks, tasks/cloudy_unified.tasks   (no dig)
 
 sh=$(sbatch --parsable --export=ALL,PHASE=shell                       submit_cloudy.sh)
 sbatch          --dependency=afterok:$sh --export=ALL,PHASE=unified    submit_cloudy.sh
 ```
 
-The `--dust-to-metal <list>` flag overrides the default "read each file's own DTM"
-behaviour and is what produces the DTM axis of the 5D STAB. Sizing note: the `unified`
+The `--f-dust <list>` flag overrides the default "read each file's own f_dust"
+behaviour and is what produces the f_dust axis of the 5D STAB. Sizing note: the `unified`
 models are the expensive ones (a wide density law at fine resolution), so give the
 unified phase the most walltime; shell is cheap. Use whole nodes (`--ntasks` = node
 core count) and let `check_status` + resume absorb any walltime cutoff.
 
-If you instead want DTM to affect the **dynamics** (it scales the dust opacity /
-IR trapping), make `dust_to_metal` an axis in the evolution `grid.json` rather than a
-Cloudy sweep; the evolution output paths disambiguate with a `_dtm` suffix.
+If you instead want f_dust to affect the **dynamics** (it scales the dust opacity /
+IR trapping), make `f_dust` an axis in the evolution `grid.json` rather than a
+Cloudy sweep; the evolution output paths disambiguate with a `_fdust` suffix.
 
 ## Disk and inode quotas (large grids)
 
 A finished Cloudy model leaves ~100 small files per parameter directory, most of them
 diagnostic dumps (`.ovr`, `.heat`, `.cool`, `.grTemp`, ...) the STAB build never reads.
-A big grid (thousands of models × a DTM sweep) therefore hits the cluster's **file-count
+A big grid (thousands of models × a f_dust sweep) therefore hits the cluster's **file-count
 (inode) quota** well before its byte quota. Check both:
 
 ```bash
@@ -160,7 +160,7 @@ parameter directory's pure-diagnostic files (`.grAbund`, `.grCont`, `.grDGrat`,
 `.grTemp`, `.heat`, `.cool`) into one `output_archive.tar` and removes the originals. It
 keeps loose every file the SED interpolant + STAB build reads: `.cont` and
 `.diffContUnatt` (continuum, incl. the unattenuated nebular continuum for the noDust /
-variable-DTM SEDs), `.cum`/`.cumEmer` (cumulative line luminosities for the HR STABs),
+variable-f_dust SEDs), `.cum`/`.cumEmer` (cumulative line luminosities for the HR STABs),
 `.ovr`/`.phy`/`.rad` (ionization / density / radial structure), plus `.in`/`.out`. So it
 is safe to run *before* the build (≈25% fewer files per directory). It is fully
 reversible:
@@ -189,13 +189,13 @@ byte and inode budgets are co-tenant with other users' runs, and always point
 
 The STAB build (interpolant stage) has a *second* large transient besides `cloudy_output`:
 a parsed-Cloudy **interpolant cache** whose size **scales with the grid** (one entry per
-cloud, accumulating per DTM). It defaults to the package dir (`toddlers/stab/cache`), which
-on many clusters sits on the small `$HOME`/`$DATA` quota, so a DTM sweep that accumulated
-every DTM's cache there can blow the quota mid-build (this bit the paper's variable-DTM run).
+cloud, accumulating per f_dust). It defaults to the package dir (`toddlers/stab/cache`), which
+on many clusters sits on the small `$HOME`/`$DATA` quota, so a f_dust sweep that accumulated
+every f_dust's cache there can blow the quota mid-build (this bit the paper's variable-f_dust run).
 The policy is a clean binary (both in `campaign.py`): **delete all** by default (the cache is
-cleared before each DTM build and once more at the end, so it never persists and the live
-footprint stays at one DTM — a resume skips finished DTMs via the saved interpolant `.pkl`, not
-the cache), or **keep all** with **`--keep-interp-cache`** (no clearing — retain every DTM's
+cleared before each f_dust build and once more at the end, so it never persists and the live
+footprint stays at one f_dust — a resume skips finished f_dust values via the saved interpolant `.pkl`, not
+the cache), or **keep all** with **`--keep-interp-cache`** (no clearing — retain every f_dust's
 cache for debugging). Independently, **`--cache-dir <scratch>`** (env `TODDLERS_INTERP_CACHE`)
 relocates the cache off the quota partition; for a large sweep, or whenever you keep-all, set
 `--cache-dir` to a scratch path.
@@ -231,7 +231,7 @@ resume gate — no manual resubmit needed.
 - Clear stale `__pycache__` after updating code on the cluster.
 - **A `[patch-check]` line warns if `cloudy.exe` lacks the unattenuated-continuum patch.**
   The patch (`cloudy_patches/`) is optional; without it Cloudy writes no `.diffContUnatt`,
-  so the noDust / variable-DTM SEDs fall back to the standard attenuated diffuse continuum.
+  so the noDust / variable-f_dust SEDs fall back to the standard attenuated diffuse continuum.
   Each worker notes this once (greppable as `[patch-check]`) if the patch is absent, so you
   know which behaviour a grid was built with. No warning means the patch is present.
 - **After rebuilding or re-patching `cloudy.exe`, clear (or force-regenerate) the

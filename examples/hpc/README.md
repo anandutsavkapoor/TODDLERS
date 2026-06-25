@@ -36,13 +36,13 @@ hand-edited.
 Run it on the cluster's login node (it calls `sbatch`). Always preview with `--dry-run`
 first: it prints every `generate_tasks` / `sbatch` command and submits nothing.
 
-## Two campaign types (DTM is the only difference)
+## Two campaign types (f_dust is the only difference)
 
-* **Fiducial (no DTM axis)** — omit `--dust-to-metal`: a single fiducial-DTM run.
-* **Variable-DTM (paper)** — `--dust-to-metal 0.02 0.10 0.20 0.40 0.60 0.80 1.00`: the
-  Cloudy DTM sweep that produces the 5D (DTM-axis) SFR-normalised STAB.
+* **Fiducial (no f_dust axis)** — omit `--f-dust`: a single fiducial f_dust run.
+* **Variable-f_dust (paper)** — `--f-dust 0.02 0.10 0.20 0.40 0.60 0.80 1.00`: the
+  Cloudy f_dust sweep that produces the 5D (f_dust-axis) SFR-normalised STAB.
 
-DIG is off by default (the paper's variable-DTM grid has none). The Cloudy time grid
+DIG is off by default (the paper's variable-f_dust grid has none). The Cloudy time grid
 defaults to `toddlers_v1`, which the SED interpolant requires.
 
 ### The two campaigns behind the paper
@@ -53,9 +53,9 @@ Both are the *same* driver; they map onto the two recipes below:
    and run evolution → Cloudy → STAB in one dependent chain — see **From scratch** below.
    The grid axes live in `toddlers.stab.config` per template, so regenerate the grid JSON
    with `make_grid.py` (it reads those axes) rather than hand-editing.
-2. **Variable-DTM 5D library**: start from the already-computed evolution and sweep DTM at
+2. **Variable-f_dust 5D library**: start from the already-computed evolution and sweep f_dust at
    the Cloudy stage, scaled across nodes — see **From existing evolution runs** + **Large
-   workloads** below. This is the campaign that builds the paper's DTM-axis SFR-normalised
+   workloads** below. This is the campaign that builds the paper's f_dust-axis SFR-normalised
    STAB.
 
 ## From scratch (run evolution too)
@@ -91,7 +91,7 @@ python -m toddlers.hpc.campaign \
     --account <your_account> --partition <partition> --ntasks 128 \
     --python-module <SciPy-bundle/...> --toddlers-src $PWD/src \
     --cloudy-exe /path/to/cloudy.exe --cloudy-data /path/to/cloudy/data \
-    --dust-to-metal 0.02 0.10 0.20 0.40 0.60 0.80 1.00
+    --f-dust 0.02 0.10 0.20 0.40 0.60 0.80 1.00
 ```
 
 The existing `.dat` must sit in the standard
@@ -102,13 +102,13 @@ back from the `.dat` filenames, so the libraries match whatever sims you bring.
 
 `--ntasks` is the cores **per node**; `--max-nodes` caps how many nodes a phase scales to.
 Each Cloudy phase is sized to its own task count: `nodes = ceil(tasks / ntasks)` capped at
-`--max-nodes`. Small phases stay on one node (no wasted cores); large ones (e.g. a DTM
+`--max-nodes`. Small phases stay on one node (no wasted cores); large ones (e.g. a f_dust
 sweep with 10⁴–10⁵ Cloudy tasks) spread across nodes for wall-clock speed at the **same**
-CPU-hours (more workers → fewer waves). For a big variable-DTM run:
+CPU-hours (more workers → fewer waves). For a big variable-f_dust run:
 
 ```bash
 python -m toddlers.hpc.campaign --evolution-dir <leaf> ... \
-    --dust-to-metal 0.02 0.10 0.20 0.40 0.60 0.80 1.00 \
+    --f-dust 0.02 0.10 0.20 0.40 0.60 0.80 1.00 \
     --ntasks 128 --max-nodes 8
 ```
 

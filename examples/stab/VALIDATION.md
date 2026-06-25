@@ -40,7 +40,7 @@ accepts.)
 
 ## Step 1 — produce the cloud-family STAB (run on the cluster)
 
-From-existing campaign, cloud-family only (no DTM sweep, no SFR-norm needed for this check):
+From-existing campaign, cloud-family only (no f_dust sweep, no SFR-norm needed for this check):
 
 ```bash
 python -m toddlers.hpc.campaign \

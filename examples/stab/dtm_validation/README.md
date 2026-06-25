@@ -1,4 +1,4 @@
-# Variable-DTM STAB: sanity checks
+# Variable-f_dust STAB: sanity checks
 
 This directory holds the validation of the **variable dust-to-metal (DTM) STAB library**,
 i.e. the SKIRT `.stab` SED families that carry a dust-to-metal scaling axis `f_dust`
@@ -7,7 +7,7 @@ grain abundance per H atom down). The checks confirm that the `f_dust` axis modi
 SEDs and the emission lines correctly, and that the baseline slice reproduces the published
 library.
 
-Three checks are specific to the DTM axis (scripts here); one is the general nebular-physics
+Three checks are specific to the f_dust axis (scripts here); one is the general nebular-physics
 check (`../physics_checks.py`). All figures use the repository A&A style
 (`../../paper_figures/paper_style.mplstyle`) and are produced for one representative cloud
 cell, `Z = 0.02`, `eps_SF = 0.05`, `n_cl = 160 cm^-3` (BPASS chab100 bin, 10 Myr SFH), which
@@ -15,7 +15,7 @@ is changeable via `--Z/--sfe/--ncl`.
 
 > The `.stab` binaries used to make these figures are **not** committed (see `.gitignore`).
 > Regenerate them with the STAB pipeline (`examples/stab/run_stab_pipeline.sh`) or copy the
-> built `ToddlersSFRNormalizedSEDFamily_*_DTM_*.stab` into this directory before plotting.
+> built `ToddlersSFRNormalizedSEDFamily_*_fdust_*.stab` into this directory before plotting.
 
 ## The checks
 
@@ -48,7 +48,7 @@ with the right wavelength dependence:
   photons); collisional optical and FIR fine-structure lines up (higher electron temperature).
 
 ### 3. vs shipped SKIRT reference  - `compare_vs_reference.py` -> `vs_reference.png`
-New STAB at `f_dust = 1` against the shipped single-DTM
+New STAB at `f_dust = 1` against the shipped single-f_dust
 `ToddlersSEDFamily_SFRNormalized_*_10Myr.stab`, at the 8 overlapping
 (Z, SFE, n_cl) nodes. Prints a per-band fractional-difference table and an SED overlay with a
 residual subpanel.
@@ -65,7 +65,7 @@ Requires a local copy of the SKIRT TODDLERS resources; pass
 `--ref-dir /path/to/SKIRT9_Resources_TODDLERS/SED_TODDLERS`.
 
 ### 4. Nebular physics  - `../physics_checks.py` -> `physics_checks_<prefix>.png`
-Textbook checks on the interpolants at the baseline `f_dust = 1`, independent of the DTM axis:
+Textbook checks on the interpolants at the baseline `f_dust = 1`, independent of the f_dust axis:
 H-alpha declines with cluster age; intrinsic H-alpha sits on the case-B line
 `L_Halpha = 1.37e-12 * Q_abs` (absorbed ionizing photon rate `Q*(1-f_esc)`); the BPT diagram
 lands in the star-forming locus below Kauffmann+03; the dust IR peak shifts with age. Reads
