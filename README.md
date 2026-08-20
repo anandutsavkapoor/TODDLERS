@@ -72,7 +72,7 @@ pytest -m "cloudy or data"   # tests needing Cloudy or downloaded data
 ```
 
 ## Citation
-If you use TODDLERS, please cite Kapoor et al. (2023, MNRAS 526, 3871) and the TODDLERS 2.0 paper (Kapoor et al., submitted). See [`CITATION.cff`](CITATION.cff).
+If you use TODDLERS, please cite Kapoor et al. (2023, MNRAS 526, 3871), Kapoor et al. (2024, A&A 692, A79), and the TODDLERS 2.0 paper (Kapoor et al. 2026, A&A, in press, [doi:10.1051/0004-6361/202660433](https://doi.org/10.1051/0004-6361/202660433)). See [`CITATION.cff`](CITATION.cff).
 
 ## License
 See [`LICENSE`](LICENSE).

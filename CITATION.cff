@@ -5,9 +5,9 @@ authors:
     given-names: Anand Utsav
     orcid: https://orcid.org/0000-0002-5187-1725
     affiliation: "Sterrenkundig Observatorium, Universiteit Gent, Belgium"
-title: "TODDLERS 2.0: Stellar feedback and observables across diverse IMFs, binary populations, and cloud environments"
+title: "TODDLERS 2.0: Stellar feedback and observables across diverse initial mass functions, binary populations, and cloud environments"
 version: 2.0.0
-date-released: 2025-XX-XX  # update on publication
+date-released: 2026-06-13
 url: "https://github.com/anandutsavkapoor/TODDLERS"
 license: MIT
 preferred-citation:
@@ -16,10 +16,22 @@ preferred-citation:
     - family-names: Kapoor
       given-names: Anand Utsav
       orcid: https://orcid.org/0000-0002-5187-1725
-  title: "TODDLERS 2.0: Stellar feedback and observables across diverse IMFs, binary populations, and cloud environments"
+    - family-names: Gebek
+      given-names: Andrea
+    - family-names: Baes
+      given-names: Maarten
+    - family-names: De Rijcke
+      given-names: Sven
+    - family-names: van der Wel
+      given-names: Arjen
+    - family-names: Vicens-Mouret
+      given-names: Sébastien
+    - family-names: Robert
+      given-names: Carmelle
+  title: "TODDLERS 2.0: Stellar feedback and observables across diverse initial mass functions, binary populations, and cloud environments"
   journal: "Astronomy & Astrophysics"
-  year: 2025
-  doi: "XX.XXXX/XXXXXXXX"  # update on publication
+  year: 2026
+  doi: "10.1051/0004-6361/202660433"
 references:
   - type: article
     authors:
