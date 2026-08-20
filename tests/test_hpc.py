@@ -189,6 +189,45 @@ def test_modifier_turbulence_clamped_then_noop():
     assert again == clamped
 
 
+def test_eden_conv_outranks_zone_grind():
+    # "reason edn mole-grn" is electron-density non-convergence from the molecule/
+    # grain chemistry in deep cold zones -- turbulence does NOT fix it. The specific
+    # eden failure must route to the eden repair; a plain ionization non-convergence
+    # (no "reason edn") must still route to the turbulence repair.
+    c = CloudyErrorClassifier()
+    eden = ("PROBLEM  ConvFail 1,  ionization not converged iteration 3 zone 1328 "
+            "fnzone 1333.81 reason edn mole-grn")
+    err = c.classify_error(eden)
+    assert err is not None and err.name == "Eden Non-Convergence"
+    assert err.modification_function == "relax_eden_convergence"
+    plain = "PROBLEM  ConvFail 2,  ionization not converged iteration 2 zone 900 reason pressure"
+    assert c.classify_error(plain).name == "Zone Non-Convergence"
+
+
+def test_modifier_eden_applies_immediately():
+    # An eden-diagnosed failure (reason edn) must relax eden on the FIRST repair, not
+    # climb a turbulence ladder first: each turbulence rung is a ~5-6 h grind, so
+    # climbing base -> ceiling exceeds the resume-round walltime and thrashes to
+    # timeout without ever reaching eden (observed on f_dust=0.8). The repair puts
+    # turbulence straight at its ceiling AND inserts the eden relaxation in one pass.
+    m = CloudyInputModifier()
+    c = CloudyErrorClassifier()
+    err = c.classify_error("PROBLEM ConvFail 1, ionization not converged zone 9 reason edn mole-grn")
+    r1, _ = m.modify_input("turbulence 0.154503 km/sec no pressure\niterate to convergence max=10\n", err)
+    assert f"turbulence {m.TURBULENCE_CEILING:.6f} km/sec" in r1
+    assert "no pressure" not in r1                                  # turbulent pressure active
+    assert f"set eden convergence {m.EDEN_CONV_FLOOR:.3g}" in r1    # eden relaxed on FIRST repair
+    # subsequent repair escalates the tolerance, clamped at the ceiling
+    import re as _re
+    r2, _ = m.modify_input(r1, err)
+    v = float(_re.search(r"set eden convergence ([0-9.eE-]+)", r2).group(1))
+    assert abs(v - m.EDEN_CONV_FLOOR * m.EDEN_CONV_ESCALATE) < 1e-9
+    high = f"turbulence {m.TURBULENCE_CEILING:.6f} km/sec\nset eden convergence 0.05\niterate to convergence max=10\n"
+    r3, _ = m.modify_input(high, err)
+    vc = float(_re.search(r"set eden convergence ([0-9.eE-]+)", r3).group(1))
+    assert abs(vc - m.EDEN_CONV_CEILING) < 1e-9
+
+
 def test_modifier_increase_zones_bounded():
     m = CloudyInputModifier()
     assert "set nend 1200" in m.increase_zones("set nend 800\n")

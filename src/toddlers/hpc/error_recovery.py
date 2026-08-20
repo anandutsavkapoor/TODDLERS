@@ -37,6 +37,23 @@ class CloudyErrorClassifier:
                 description="Too many convergence failures",
                 solution="Add turbulence pressure",
                 modification_function="add_turbulence_pressure"),
+            # Electron-density non-convergence driven by the molecule/grain
+            # chemistry in the deep, cold, dense part of the shell ("reason edn
+            # mole-grn"). A stricter sub-case of conv_zone that turbulence does
+            # NOT fix (turbulence eases line transfer / pressure, not the eden
+            # solve), so it must rank ABOVE conv_zone to avoid being routed to a
+            # turbulence-only repair that escalates to its ceiling and still
+            # fails. The repair escalates turbulence first (the cheap aid that
+            # clears the majority of grinders) and only once turbulence is at its
+            # ceiling relaxes the eden convergence criterion -- i.e. the eden
+            # hammer is a genuine last resort, applied only when everything else
+            # has been exhausted and the eden solve is the residual cause.
+            "eden_conv": CloudyError(
+                name="Eden Non-Convergence",
+                pattern=r"PROBLEM\s+ConvFail\s+\d+,\s+ionization not converged.*reason\s+edn",
+                description="Electron-density non-convergence (molecule/grain, deep cold zones)",
+                solution="Relax eden convergence (after turbulence)",
+                modification_function="relax_eden_convergence"),
             # Per-zone ionization non-convergence (no terminal abort): the model
             # crawls through deep zones in optically-thick, dense, dusty gas. Must
             # rank ABOVE zone_limit so a grinder that also hits the zone cap is
@@ -169,6 +186,55 @@ class CloudyInputModifier:
             return f"cosmic rays background {current * 1.25:.3f}"
 
         return re.sub(pattern, replacement, input_text)
+
+    # Eden convergence relaxation (last-resort molecule/grain eden non-convergence).
+    # Cloudy default conv.EdenErrorAllowed = 1e-3; "set eden convergence <f>" loosens
+    # it. Start one decade looser, escalate, clamp well below unity so the eden solve
+    # stays meaningful (a ~few-percent tolerance still yields a sound continuum SED,
+    # which is what the STAB consumes; the affected quantity is the deep-zone eden,
+    # not the emergent spectrum).
+    EDEN_CONV_FLOOR = 1e-2         # first relaxed tolerance (one decade above default)
+    EDEN_CONV_ESCALATE = 3.0      # multiplier per subsequent repair
+    EDEN_CONV_CEILING = 0.1       # hard cap (10%); beyond this the eden solve is moot
+
+    def relax_eden_convergence(self, input_text: str) -> str:
+        """Relax the eden convergence criterion for a diagnosed eden failure.
+
+        The "reason edn mole-grn" ConvFail is electron-density non-convergence from
+        the molecule/grain chemistry in the deep, cold, dense shell. This fires ONLY
+        on the ``eden_conv`` signature, i.e. once Cloudy has already reported that the
+        eden solve is the residual cause -- so the "everything else has failed" gate
+        is the signature match itself, not a within-repair turbulence climb.
+
+        An earlier version escalated turbulence first and only relaxed eden once
+        turbulence reached its 12 km/s ceiling. That THRASHED: each turbulence rung is
+        a ~5-6 h grind, so climbing base -> ceiling takes ~20-24 h, longer than the
+        resume-round walltime, and the round times out before eden is ever reached
+        (observed on f_dust=0.8 shell_18.05/19.05, 7 rounds, zero progress). Turbulence
+        does not fix an eden failure anyway. So: apply turbulence at its ceiling AND
+        the eden relaxation in a single pass, so the model converges within one grind.
+        The eden tolerance escalates on each repair and is clamped, mirroring the
+        turbulence/zone repairs, so it cannot loosen without bound before the caller
+        gives up to manual review.
+        """
+        # Put turbulence at its ceiling in one step (line broadening still helps the
+        # transfer; no reason to climb slowly for an already-diagnosed eden failure).
+        text = re.sub(
+            r"turbulence\s+\d+\.?\d*\s+km/sec(?:\s+no\s+pressure)?",
+            f"turbulence {self.TURBULENCE_CEILING:.6f} km/sec", input_text)
+
+        existing = re.search(r"set eden (?:convergence|error)\s+([0-9.eEdD+-]+)", text)
+        if existing:
+            val = min(float(existing.group(1).replace("d", "e").replace("D", "e"))
+                      * self.EDEN_CONV_ESCALATE, self.EDEN_CONV_CEILING)
+            return re.sub(r"set eden (?:convergence|error)\s+[0-9.eEdD+-]+",
+                          f"set eden convergence {val:.3g}", text)
+
+        # Not present yet: insert right after the iterate line (a stable anchor that
+        # every model carries).
+        val = self.EDEN_CONV_FLOOR
+        return re.sub(r"(iterate to convergence[^\n]*\n)",
+                      rf"\1set eden convergence {val:.3g}\n", text, count=1)
 
     ZONE_CEILING = 12000           # hard cap on set nend across repeated repairs
 
