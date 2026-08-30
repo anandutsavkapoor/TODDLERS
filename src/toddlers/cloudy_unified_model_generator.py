@@ -42,12 +42,26 @@ class UnifiedModelGenerator:
         density_law, shell_inner_radius = self._create_density_law(t)
         density_law_filename = f"{self.model_prefix}_density_law_{t/MYR_TO_SEC:.2f}.ini"
         self._write_density_law_file(density_law_filename, density_law)
-        
+
+        # Bound Cloudy's first-zone setup scan to the dlaw table's outer edge.
+        # radius_first.cpp doubles its probe step until the density changes by >5%.
+        # When the shell illuminated-face density lies within 5% of the leftover-cloud
+        # density (a recollapse infall-minimum, where a thin dense shell spike sits
+        # between a face and cloud of nearly equal density), the two-point probe leaps
+        # the spike, reads <5% across the flat cloud, and marches past the last table
+        # row, aborting in setup with "requested radius outside range of dense_tabden".
+        # The dlaw table IS the model's spatial extent, so stopping at its outer edge is
+        # physically exact; the model always reaches its Stop mass ~25x deeper in, so
+        # this bounds only the setup scan and changes no physics for any model.
+        table_depth = density_law[-1][0] - density_law[0][0]
+        stop_thickness_log = np.log10(table_depth * 0.999)
+
         return [
             f'init "{density_law_filename}"',
             self.base.get_turbulence_str(t),
             'sphere',
-            f'Radius inner = {shell_inner_radius / PC_TO_CM:.6e} parsec linear'
+            f'Radius inner = {shell_inner_radius / PC_TO_CM:.6e} parsec linear',
+            f'stop thickness {stop_thickness_log:.6f}'
         ]
 
     def _check_mass_sufficiency(self, r_values, n_H_values, expected_mass):
