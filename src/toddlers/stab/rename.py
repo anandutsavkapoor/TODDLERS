@@ -32,6 +32,8 @@ def get_new_filename(old_filename, sfr_period="Period10Myr"):
     
     # Example old format: ToddlersSFRNormalizedSEDFamily_BPASS_chab300_bin_noDust_hr
     is_sfr_normalized = "SFRNormalized" in stem
+    # 5D f_dust-axis STABs (assembler emits an "_fdust" token) map to SKIRT's SFRNormalizedVariableDust mode
+    is_variable_dust = "fdust" in parts
     
     # Extract stellar model info (BPASS/SB99, IMF, stellar type)
     model_index = -1
@@ -65,7 +67,7 @@ def get_new_filename(old_filename, sfr_period="Period10Myr"):
     
     # Add SED mode
     if is_sfr_normalized:
-        new_name += "_SFRNormalized"
+        new_name += "_SFRNormalizedVariableDust" if is_variable_dust else "_SFRNormalized"
     else:
         new_name += "_Cloud"
     
@@ -113,7 +115,7 @@ def is_already_correct_format(filename):
         return False
         
     # Check if mode is valid
-    if parts[1] not in ["SFRNormalized", "Cloud"]:
+    if parts[1] not in ["SFRNormalized", "SFRNormalizedVariableDust", "Cloud"]:
         return False
         
     # Check if stellar model components exist
@@ -130,7 +132,7 @@ def is_already_correct_format(filename):
     
     # Additional check for SFRNormalized files: they should have a period suffix
     # But we don't enforce a specific one, just check that it has either 10Myr or 30Myr
-    if parts[1] == "SFRNormalized" and "10Myr" not in stem and "30Myr" not in stem:
+    if parts[1] in ("SFRNormalized", "SFRNormalizedVariableDust") and "10Myr" not in stem and "30Myr" not in stem:
         return False
     
     return True
