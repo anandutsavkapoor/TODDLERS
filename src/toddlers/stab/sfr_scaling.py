@@ -125,7 +125,8 @@ class SEDmanipulator:
     ) -> Tuple[float, float, u.Quantity]:
         """Compute time-averaged SED for given parameters."""
         # Create filename using physical parameters
-        filename = f"recollapse_sim_Z={params.Z.value:.3f}_epsilon={params.eta:.3f}_nCl={params.n.to(u.cm**-3).value:.1f}.sim"
+        # window-stamped so a 10 and a 30 Myr run never share a cached population
+        filename = f"recollapse_sim_Z={params.Z.value:.3f}_epsilon={params.eta:.3f}_nCl={params.n.to(u.cm**-3).value:.1f}_age{AGE_LIMIT:.1f}.sim"
         sim_file = self.recollapse_sim_dir / filename
         
         # Load or create simulation
@@ -160,9 +161,11 @@ class SEDmanipulator:
                             eps_val = f"{float(eps_val):.6f}".rstrip('0').rstrip('.')
                             n_val = f"{float(n_val):.6f}".rstrip('0').rstrip('.')
                             
-                            if (z_val == z_pattern and 
-                                eps_val == eta_pattern and 
-                                n_val == n_pattern):
+                            age_val = name_parts[5][3:] if len(name_parts) > 5 and name_parts[5].startswith('age') else None
+                            if (z_val == z_pattern and
+                                eps_val == eta_pattern and
+                                n_val == n_pattern and
+                                age_val is not None and float(age_val) == AGE_LIMIT):
                                 logger.info(f"Loading existing simulation from {existing_file}")
                                 with open(existing_file, 'rb') as f:
                                     return pickle.load(f)
@@ -353,8 +356,8 @@ class SEDmanipulator:
         # Apply conversion and reshape
         sed = linear_sed.reshape(len(t_arr), len(self.wavelength_grid)) * conversion_factor * u.W/u.m
         
-        # Calculate SFR with units
-        mass_based_sfr = (np.sum(sim.M_star_particles[mask]) * u.Msun / self.age_limit).to(u.Msun/u.yr)
+        # SFR over the sampled age span [age_start, age_limit], not age_limit from zero
+        mass_based_sfr = (np.sum(sim.M_star_particles[mask]) * u.Msun / (self.age_limit - self.age_start)).to(u.Msun/u.yr)
         
         # Calculate final SED per SFR with units
         sed_per_sfr = np.sum(sim.w_ki[mask][:, np.newaxis] * sed, axis=0) / mass_based_sfr

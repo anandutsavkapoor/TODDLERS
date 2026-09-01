@@ -24,7 +24,7 @@ MODEL_PREFIX = f"{STELLAR_TEMPLATE}_{IMF_TYPE}_{STAR_TYPE}"
 HDF5_FILENAME = f'hdf5/recollapse_data_{MODEL_PREFIX}.hdf5'
 
 # Constants
-AGE_LIMIT = 10.1             # Myr
+AGE_LIMIT = float(os.environ.get("TODDLERS_STAB_AGE_LIMIT", "10.1"))  # Myr; 10.1 or 30.1 (SKIRT sfrPeriod 10/30 Myr)
 AGE_START = 0.1              # Myr
 N_TEMPORAL_BINS = 5
 M_STAR_MEAN = 10000        # Solar masses
