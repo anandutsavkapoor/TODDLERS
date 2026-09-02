@@ -12,6 +12,19 @@ from .sfr_scaling import SEDmanipulator, SimulationParameters
 from .config import *
 from ..utils import f_dust_label
 
+# Per-process interpolator cache: one table at a time (evicted when the path changes), so
+# memory per worker is unchanged but a worker loads each f_dust table once instead of once
+# per SED (a 6-15 GB pickle per task was ~90% of the wall time under 10-way Lustre contention).
+_INTERP_CACHE = {}
+
+def _load_interpolator(path):
+    """Return the interpolator at `path`, reusing the one loaded by this process if unchanged."""
+    if path not in _INTERP_CACHE:
+        _INTERP_CACHE.clear()
+        with open(path, 'rb') as f:
+            _INTERP_CACHE[path] = pickle.load(f)
+    return _INTERP_CACHE[path]
+
 class SEDGenerator:
     """Generate SFR-scaled SEDs across the TODDLERS parameter space.
 
@@ -103,10 +116,9 @@ class SEDGenerator:
                 self.logger.info(f"Skipping existing file: {output_file}")
                 return True
 
-            # Load interpolator in each process to avoid memory sharing issues
+            # Per-process cached load (one table resident per worker; see _load_interpolator)
             interp_file = self._get_interpolator_file(dtm)
-            with open(interp_file, 'rb') as f:
-                sed_interpolator = pickle.load(f)
+            sed_interpolator = _load_interpolator(interp_file)
 
             # Create simulation parameters
             sim_params = SimulationParameters(
@@ -146,12 +158,13 @@ class SEDGenerator:
     def generate_all_seds(self):
         """Generate SEDs for all parameter combinations, including DTM if specified."""
         if self.f_dust_values is not None:
+            # f_dust-MAJOR order so consecutive tasks share one interpolator (see _load_interpolator)
             parameter_combinations = [
                 (Z, eta, n_cl, dtm)
+                for dtm in self.f_dust_values
                 for Z in METALLICITIES
                 for eta in STAR_FORMATION_EFFICIENCIES
                 for n_cl in CLOUD_DENSITIES
-                for dtm in self.f_dust_values
             ]
         else:
             parameter_combinations = [
