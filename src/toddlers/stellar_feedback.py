@@ -175,11 +175,11 @@ class StellarFeedback:
         """
         if not (Z_min <= self.Z <= Z_max):
             raise ValueError(f"Metallicity (Z={self.Z}) is outside the allowed range [{Z_min}, {Z_max}]")
-        if self.Z not in Z_values:
-            closest_Z = Z_values[np.argmin(np.abs(Z_values - self.Z))]
-            print(f"Warning: Specified Z={self.Z} is not in the pre-computed set. "
-                  f"Using closest value: {closest_Z}")
-            self.Z = closest_Z
+        match = np.isclose(Z_values, self.Z, rtol=1e-6, atol=0.0)
+        if not match.any():
+            raise ValueError(f"Metallicity Z={self.Z} is not a node of the {self.template} grid "
+                             f"{list(Z_values)}. Use one of these values; templates are not interpolated in Z.")
+        self.Z = Z_values[match][0]
 
     def _validate_pysb99_metallicity(self, interpolant):
         """

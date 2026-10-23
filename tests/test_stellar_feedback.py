@@ -28,3 +28,15 @@ def test_ionizing_output_declines_after_early_peak(sb99):
     q_early = sb99.get_ionizing_photon_rate(1.0 * MYR_TO_SEC)
     q_late = sb99.get_ionizing_photon_rate(10.0 * MYR_TO_SEC)
     assert q_early > q_late
+
+
+@pytest.mark.parametrize("template,Z", [("SB99", 0.014), ("SB99", 0.01), ("BPASS", 0.005)])
+def test_off_node_metallicity_raises(template, Z):
+    with pytest.raises(ValueError, match="not a node"):
+        StellarFeedback(template=template, Z=Z, M_cl_init=1e6 * M_SUN, eta_sf=0.05, t_list_collapse=[])
+
+
+def test_node_metallicity_tolerates_float_noise():
+    sf = StellarFeedback(template="SB99", Z=0.02 * (1 + 1e-9), M_cl_init=1e6 * M_SUN,
+                         eta_sf=0.05, t_list_collapse=[])
+    assert sf.Z == 0.02
