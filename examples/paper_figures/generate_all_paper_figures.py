@@ -1045,7 +1045,7 @@ def generate_fig_ram_force():
     print("METHODOLOGY: Ram force")
     print("="*70)
 
-    Z = 0.014
+    Z = 0.020
     eta_sf = 0.05
     n_cl = 100.0
     M_cl_init = 1e5 * M_SUN
