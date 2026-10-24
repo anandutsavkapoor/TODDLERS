@@ -15,6 +15,9 @@ large, cool stars are present:
   (pySB99's radius formula implies L_sun = 3.784e33 erg/s, against
   3.839e33 used here). Tolerance 0.0005 dex. Before the fix this age gives
   -0.0647 dex.
+
+Also covers the library guards: WM-basic raises where its grid is missing,
+and IZw18 warns that its WR spectra are copies of the Z = 0.020 grid.
 """
 import warnings
 
@@ -86,3 +89,25 @@ def test_clean_age_offset_unchanged(kroupa_mw):
     assert n_assigned == n_stars
     assert abs(diff - CLEAN_AGE_OFFSET_DEX) <= TOLERANCE_DEX
 
+
+def _loader(metallicity, library='FW', upper_mass=100.0):
+    from toddlers.pysb99.pysb99_core import StellarPopulationConfig, StellarDataLoader
+
+    cfg = StellarPopulationConfig(total_mass=1e6, metallicity=metallicity, spectral_library=library,
+                                  imf_exponents=[1.3, 2.3], imf_mass_limits=(0.1, 0.5, upper_mass),
+                                  auto_extend_imf=False)
+    return StellarDataLoader(cfg)
+
+
+@pytest.mark.parametrize("metallicity", ['MWC', 'LMC', 'SMC', 'IZw18', 'Z0'])
+def test_wmbasic_missing_library_raises(metallicity):
+    with pytest.raises(FileNotFoundError, match="WM-basic"):
+        _loader(metallicity, library='WM').load_spectral_grid()
+
+
+def test_izw18_wr_copy_warns_only_when_reachable():
+    with pytest.warns(UserWarning, match="IZw18 Wolf-Rayet spectra"):
+        _loader('IZw18', upper_mass=100.0).load_auxiliary_data()
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        _loader('IZw18', upper_mass=60.0).load_auxiliary_data()

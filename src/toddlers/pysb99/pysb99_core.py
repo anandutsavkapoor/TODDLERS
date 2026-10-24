@@ -254,6 +254,20 @@ class StellarDataLoader:
                 filename = 'galaxy/lejeune/WMbasic_OB_Z004_tst.dat'
             elif self.config.metallicity == 'IZw18' or self.config.metallicity == 'Z0':
                 filename = 'galaxy/lejeune/WMbasic_OB_Z001_tst.dat'
+            
+            # Only the Z = 0.020 WM-basic grid ships (in the Z014 directory)
+            if not os.path.isfile(self.file_path + filename):
+                raise FileNotFoundError(
+                    f"WM-basic spectral library is not available at metallicity "
+                    f"'{self.config.metallicity}' (missing {self.file_path + filename}). "
+                    f"Use spectral_library='FW'."
+                )
+            if self.config.metallicity == 'MW':
+                warnings.warn(
+                    "spectral_library='WM' at 'MW' uses the Z = 0.020 WM-basic grid "
+                    "(no Z = 0.014 grid is shipped).",
+                    UserWarning
+                )
         else:  # FW
             if self.config.metallicity == 'MWC':
                 filename = 'FW_SB_grid_Z020_VMS.txt'
@@ -308,6 +322,17 @@ class StellarDataLoader:
         elif self.config.metallicity in ['IZw18', 'Z0']:
             metallicity_suffix = 'm13'
             wr_metallicity_suffix = 'Z001'
+        
+        # The IZw18 WR (CMFGEN) files are byte copies of the Z = 0.020 ones; they are
+        # only reached if the IMF extends above the WR minimum mass
+        if (self.config.metallicity == 'IZw18'
+                and self.config.imf_mass_limits[-1] > self.minimum_wr_mass):
+            warnings.warn(
+                f"IZw18 Wolf-Rayet spectra are copies of the Z = 0.020 grid; stars above "
+                f"{self.minimum_wr_mass:.0f} Msun that enter the WR phase get solar-metallicity "
+                f"WR spectra.",
+                UserWarning
+            )
         
         data = {}
         
@@ -1392,7 +1417,7 @@ class StellarPopulationSynthesis:
             # Large, cool stars (red supergiants, log Teff < 3.65) take the low-mass
             # (Lejeune) branch below, as in Starburst99. Every star must get one
             # spectrum, or the lists fall out of step with No_stars and radii.
-            
+
             # OB star
             elif (timestep_teffs_final[j] > 20000. and 
                 specsyn_loggs[j] > 2.2 and 
