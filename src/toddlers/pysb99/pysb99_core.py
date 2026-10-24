@@ -1389,12 +1389,9 @@ class StellarPopulationSynthesis:
                     assigned_spectra.append(self.wr_spectral_grids['wc']['spectra'][nearest_spec_ind])
                     assigned_integrated_spectra.append(self.wr_spectral_grids['wc']['integrated'][nearest_spec_ind])
             
-            # Large, cool star
-            elif timestep_temps_final[j] < 3.65 and initial_masses[j] > self.loader.minimum_wr_mass:
-                if hasattr(self, 'No_stars'):
-                    population_choice.append(self.No_stars[j])
-                else:
-                    raise AttributeError("self.No_stars not found - this should be set during IMF calculation")
+            # Large, cool stars (red supergiants, log Teff < 3.65) take the low-mass
+            # (Lejeune) branch below, as in Starburst99. Every star must get one
+            # spectrum, or the lists fall out of step with No_stars and radii.
             
             # OB star
             elif (timestep_teffs_final[j] > 20000. and 
