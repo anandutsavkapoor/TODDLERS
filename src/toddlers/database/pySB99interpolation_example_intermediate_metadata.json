@@ -15,8 +15,8 @@
   "time_start_myr": 0.01,
   "time_end_myr": 31.0,
   "time_step_myr": 0.1,
-  "generation_date": "2026-04-01T21:35:23.130730",
-  "imf_type": "custom",
+  "generation_date": "2026-10-24T08:57:00.890945",
+  "population_type": "custom",
   "custom_star_numbers": {
     "30.0": 1,
     "15.0": 2

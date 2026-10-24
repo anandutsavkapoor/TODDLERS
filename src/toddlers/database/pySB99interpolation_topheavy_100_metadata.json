@@ -15,13 +15,13 @@
   "time_start_myr": 0.01,
   "time_end_myr": 31.0,
   "time_step_myr": 0.1,
-  "generation_date": "2026-04-01T22:14:33.324324",
-  "imf_type": "power_law",
-  "exponents": [
+  "generation_date": "2026-10-24T08:56:55.723481",
+  "population_type": "imf",
+  "imf_exponents": [
     1.3,
     2.0
   ],
-  "mass_limits": [
+  "imf_mass_limits": [
     0.1,
     0.5,
     100.0
