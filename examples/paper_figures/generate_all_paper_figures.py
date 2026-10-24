@@ -191,12 +191,13 @@ def save_pysb99_metadata(imf_name, imf_config):
         'time_step_myr': 0.1,
         'generation_date': datetime.now().isoformat(),
     }
+    # Keys follow what SpectralTableGenerator reads (population_type, imf_exponents, imf_mass_limits)
     if 'exponents' in imf_config:
-        metadata['imf_type'] = 'power_law'
-        metadata['exponents'] = imf_config['exponents']
-        metadata['mass_limits'] = imf_config['mass_limits']
+        metadata['population_type'] = 'imf'
+        metadata['imf_exponents'] = imf_config['exponents']
+        metadata['imf_mass_limits'] = imf_config['mass_limits']
     elif 'custom_star_numbers' in imf_config:
-        metadata['imf_type'] = 'custom'
+        metadata['population_type'] = 'custom'
         metadata['custom_star_numbers'] = {str(k): v for k, v in imf_config['custom_star_numbers'].items()}
     path = os.path.join(DATABASE_DIR, f'pySB99interpolation_{imf_name}_metadata.json')
     with open(path, 'w') as f:

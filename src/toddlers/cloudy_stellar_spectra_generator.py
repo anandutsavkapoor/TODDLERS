@@ -1,6 +1,40 @@
 from .imports import np, os, re, sys, json, RegularGridInterpolator, interp1d
 from .constants import *
 
+def parse_pysb99_population_metadata(metadata):
+    """
+    Read the population definition from a pySB99 interpolant metadata dict.
+
+    Older metadata files used imf_type/exponents/mass_limits instead of
+    population_type/imf_exponents/imf_mass_limits; both are read, so a custom
+    or non-Kroupa population never falls back to the Kroupa defaults.
+
+    Returns:
+        tuple: (population_type, custom_star_numbers, imf_exponents, imf_mass_limits)
+    """
+    population_type = metadata.get('population_type')
+    if population_type is None:
+        legacy_type = metadata.get('imf_type')
+        if legacy_type == 'custom' or 'custom_star_numbers' in metadata:
+            population_type = 'custom'
+        else:
+            population_type = 'imf'
+
+    if population_type == 'custom':
+        # JSON converts dict keys to strings - convert back to floats
+        custom_star_numbers_raw = metadata.get('custom_star_numbers', None)
+        if custom_star_numbers_raw is not None:
+            custom_star_numbers = {float(k): v for k, v in custom_star_numbers_raw.items()}
+        else:
+            custom_star_numbers = None
+        return population_type, custom_star_numbers, None, None
+
+    imf_exponents = metadata.get('imf_exponents', metadata.get('exponents', [1.3, 2.3]))
+    imf_mass_limits = tuple(metadata.get('imf_mass_limits',
+                                         metadata.get('mass_limits', (0.1, 0.5, 100.0))))
+    return population_type, None, imf_exponents, imf_mass_limits
+
+
 class SpectralTableGenerator:
     def __init__(self, template, imf, star_type, max_age=None, wavelength_resolution_factor=1):
         """
@@ -272,22 +306,8 @@ class SpectralTableGenerator:
             Z_values = metadata['Z_values']
             spectral_library = metadata['spectral_library']
             rotation = metadata.get('rotation', False)
-            population_type = metadata.get('population_type', 'imf')
-            
-            # Get IMF or custom population parameters
-            if population_type == 'custom':
-                # JSON converts dict keys to strings - convert back to floats
-                custom_star_numbers_raw = metadata.get('custom_star_numbers', None)
-                if custom_star_numbers_raw is not None:
-                    custom_star_numbers = {float(k): v for k, v in custom_star_numbers_raw.items()}
-                else:
-                    custom_star_numbers = None
-                imf_exponents = None
-                imf_mass_limits = None
-            else:
-                custom_star_numbers = None
-                imf_exponents = metadata.get('imf_exponents', [1.3, 2.3])
-                imf_mass_limits = tuple(metadata.get('imf_mass_limits', (0.1, 0.5, 100.0)))
+            population_type, custom_star_numbers, imf_exponents, imf_mass_limits = \
+                parse_pysb99_population_metadata(metadata)
             
             print(f"  Loaded metadata: {len(metallicity_strings)} metallicities, library={spectral_library}")
             print(f"  Population type: {population_type}")
