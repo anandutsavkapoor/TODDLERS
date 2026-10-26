@@ -1,8 +1,8 @@
 """Future-proof, picklable replacement for ``scipy.interpolate.interp2d``.
 
-``interp2d`` was deprecated in SciPy 1.10 and **removed in SciPy 1.14**, which broke the
-shipped feedback interpolants (pickled ``interp2d`` objects) on any modern SciPy. This
-module provides :class:`Interp2DLinear`, a small picklable callable backed by
+``interp2d`` was deprecated in SciPy 1.10 and **removed in SciPy 1.14**, so pickled
+``interp2d`` objects do not load on a current SciPy. This module provides
+:class:`Interp2DLinear`, a small picklable callable backed by
 :class:`scipy.interpolate.RegularGridInterpolator` that reproduces ``interp2d``'s linear
 call semantics exactly:
 
@@ -15,10 +15,11 @@ call semantics exactly:
   bilinear interpolation, i.e. identical to a linear ``RegularGridInterpolator``, so the
   replacement is numerically equivalent (exact at nodes).
 
-It is used both for newly built interpolants and to regenerate the shipped ``.obj`` feedback
-libraries from the nodes recovered out of the legacy ``interp2d`` pickles. Because instances
-are plain attributes plus one ``RegularGridInterpolator``, they pickle and unpickle on any
-SciPy version with no ``interp2d`` dependency.
+It backs the interpolants built from the HDF5 feedback tables, and it lets feedback tables in
+the earlier ``.obj`` format (pickled ``interp2d`` objects) load through
+``toddlers.feedback_tables.legacy``. Because instances are plain attributes plus one
+``RegularGridInterpolator``, they pickle and unpickle on any SciPy version with no
+``interp2d`` dependency.
 """
 import bisect
 
@@ -110,5 +111,11 @@ class Interp2DLinear:
         y0, y1 = yg[iy], yg[iy + 1]
         tx = 0.0 if x1 == x0 else (xv - x0) / (x1 - x0)
         ty = 0.0 if y1 == y0 else (yv - y0) / (y1 - y0)
-        return (z[iy, ix]     * (1 - tx) * (1 - ty) + z[iy, ix + 1]     * tx * (1 - ty)
-              + z[iy + 1, ix] * (1 - tx) * ty       + z[iy + 1, ix + 1] * tx * ty)
+        # Sum only the corners with non-zero weight, so a non-finite neighbour that does
+        # not contribute (weight 0, e.g. at an exact node) cannot turn the value into NaN.
+        total = 0.0
+        for w, v in (((1 - tx) * (1 - ty), z[iy, ix]), (tx * (1 - ty), z[iy, ix + 1]),
+                     ((1 - tx) * ty, z[iy + 1, ix]), (tx * ty, z[iy + 1, ix + 1])):
+            if w != 0.0:
+                total += w * v
+        return total

@@ -1,6 +1,8 @@
 from .imports import np
 from .constants import *
+from ._fileutils import atomic_text_write
 from .cloudy_output_handler import CloudyOutputHandler
+from .cloudy_stellar_spectra_generator import cloudy_logZ_text
 
 class DIGModelGenerator:
     """
@@ -112,7 +114,7 @@ class DIGModelGenerator:
 
     def get_old_stellar_source(self):
         """Get the source specification for the old stellar population."""
-        return f'table star "BPASS_chab100_sin_burst_resFac10.ascii" age=1e9 logZ={np.log10(self.base.Z)}'
+        return f'table star "BPASS_chab100_sin_burst_resFac10.ascii" age=1e9 logZ={cloudy_logZ_text(self.base.Z)}'
 
     def calculate_old_stellar_luminosity(self, t, inner_model_prefix):
         """Calculate the luminosity of the old stellar population to achieve the specified logU_background."""
@@ -262,7 +264,7 @@ class DIGModelGenerator:
 
         file_path = f"{self.model_prefix}_{t/MYR_TO_SEC:.2f}.in"
         inner_file = f"{inner_model_prefix}_{t/MYR_TO_SEC:.2f}.in"
-        with open(file_path, 'w') as f:
+        with atomic_text_write(file_path) as f:   # a reader never sees a partial .in
             
             f.write(f"# DIG model at t = {t/MYR_TO_SEC:.2f} Myr\n")
             f.write(f"# Inner model file: {inner_file}\n")

@@ -7,7 +7,7 @@ Most users do **not** run their own grids:
 - **Use the precomputed STAB libraries** (in SKIRT, or for MCMC fitting): pure table lookup,
   no Cloudy and no cluster — nothing here applies.
 - **Run a handful of bespoke regions**: one workstation is enough. See the local examples
-  (`examples/04_cloudy_pipeline.py`, `examples/11_bpt_diagram.py`), which call
+  (`examples/04_cloudy_pipeline.py`, `examples/10_bpt_diagram.py`), which call
   `Evolution().run_simulation()` then `CloudySimulationManager(...).run_full_simulation()`.
   No scheduler.
 - **Generate a new large grid** (new IMF/template/parameter range): this is the only case

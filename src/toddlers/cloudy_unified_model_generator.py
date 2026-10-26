@@ -1,5 +1,6 @@
 from .imports import np, interp1d
 from .constants import *
+from ._fileutils import atomic_text_write
 from .cloud_density_profiles import create_density_profile
 from .cloudy_output_handler import CloudyOutputHandler
 
@@ -256,7 +257,7 @@ class UnifiedModelGenerator:
             t (float): Current time in seconds.
         """
         file_path = f"{self.model_prefix}_{t/MYR_TO_SEC:.2f}.in"
-        with open(file_path, 'w') as f:
+        with atomic_text_write(file_path) as f:   # a reader never sees a partial .in
             f.write(f"# Unified model at t = {t/MYR_TO_SEC:.2f} Myr\n")
             
             for option in self.base.get_primary_source_options(t):

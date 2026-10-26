@@ -17,11 +17,59 @@ import numpy as np
 import pandas as pd
 import time
 import os
-from scipy.interpolate import interp1d
+from scipy.interpolate import interp1d, PchipInterpolator
 from scipy.optimize import curve_fit
 from dataclasses import dataclass
 from typing import Tuple, List, Optional, Dict, Any
 import warnings
+
+# Supernova constants (see _calc_supernovae). Starburst99 conventions: core-collapse SNe
+# release 1e51 erg of kinetic energy each, independent of metallicity (Leitherer et al.
+# 1999, ApJS 123, 3, Sect. 10), for initial masses 8-120 Msun (the SB99 SNCUT and BHCUT
+# defaults); more massive stars collapse directly to black holes.
+SN_ENERGY_ERG = 1.0e51
+SN_MASS_MIN = 8.0
+SN_MASS_MAX = 120.0
+SN_REMNANT_MASS = 1.4      # neutron-star remnant [Msun]
+YEAR_S = 3.15576e7         # Julian year [s], as in Starburst99
+MSUN_G = 1.989e33          # [g], as in the TODDLERS SB99/BPASS interpolant scripts
+# The track tables list initial masses with a small offset from their nominal values
+# (the "8 Msun" Geneva track starts at 7.999992 Msun, the "120 Msun" one at 119.75), so the
+# SN window is applied to the nominal mass: limits are widened by this relative tolerance.
+SN_MASS_RTOL = 1e-3
+
+
+def loglog_pchip(x_nodes, y_nodes, node_rtol=1e-9):
+    """Monotone PCHIP in (log10 x, log10 y) through the nodes, returning exact node values.
+
+    Used for the SN death time t_d(M_ini) and final mass M_final(M_ini) between the
+    Geneva tracks: linear interpolation in mass would make ``|dM/dt_d|`` piecewise constant
+    and the SN rate jump at every track mass; PCHIP in log-log is smooth and does not
+    overshoot. Nodes closer than 1e-6 in relative mass are
+    collapsed (the first is kept).
+    """
+    x = np.asarray(x_nodes, float); y = np.asarray(y_nodes, float)
+    o = np.argsort(x); x, y = x[o], y[o]
+    keep = np.concatenate([[True], np.diff(x) > 1e-6 * x[1:]])
+    x, y = x[keep], y[keep]
+    f = PchipInterpolator(np.log10(x), np.log10(y), extrapolate=True)
+
+    def interp(m):
+        m = np.asarray(m, float)
+        out = 10.0 ** f(np.log10(m))
+        j = np.clip(np.searchsorted(x, m), 0, len(x) - 1)
+        for jj in (j, np.clip(j - 1, 0, len(x) - 1)):
+            hit = np.abs(m - x[jj]) <= node_rtol * x[jj]
+            out = np.where(hit, y[jj], out)
+        return out
+    return interp
+
+
+def in_sn_window(mass, sn_mass_min, sn_mass_max):
+    """True where an initial mass lies in the SN window [sn_mass_min, sn_mass_max]."""
+    m = np.asarray(mass, float)
+    return (m >= sn_mass_min * (1 - SN_MASS_RTOL)) & (m <= sn_mass_max * (1 + SN_MASS_RTOL))
+
 
 def safe_log10(array, min_val=1e-50):
     """Safe logarithm that avoids log(0) warnings."""
@@ -72,6 +120,18 @@ class StellarPopulationConfig:
     time_start: float = 0.01e6  # Start time in years
     time_end: float = 50e6    # End time in years
     time_step: float = 0.1e6  # Time step in years
+
+    # Core-collapse supernovae (mechanical feedback). With include_supernovae=False the
+    # mechanical outputs are the stellar winds alone.
+    include_supernovae: bool = True
+    sn_energy_erg: float = SN_ENERGY_ERG       # kinetic energy per SN
+    sn_mass_min: float = SN_MASS_MIN           # lowest initial mass that explodes [Msun]
+    sn_mass_max: float = SN_MASS_MAX           # above this: direct collapse, no SN [Msun]
+    sn_remnant_mass: float = SN_REMNANT_MASS   # ejecta mass = final track mass - remnant
+    # 'spread': the SNe of an IMF mass bin are spread over that bin's death-time interval;
+    # 'point': each star explodes at its own death time. None picks 'point' for
+    # custom_star_numbers (individual stars) and 'spread' for IMF populations.
+    sn_time_deposition: Optional[str] = None
     
     def __post_init__(self):
         if self.imf_exponents is None:
@@ -122,6 +182,20 @@ class StellarPopulationResults:
     stellar_temperatures: List[np.ndarray]
     stellar_luminosities: List[np.ndarray]
     number_of_stars: np.ndarray
+
+    # Supernovae, per output time bin (bins centred on ``times``): number of SNe,
+    # SN power [erg/s, LINEAR] and SN momentum injection rate [dyn, LINEAR].
+    sn_number: Optional[np.ndarray] = None
+    sn_power: Optional[np.ndarray] = None
+    sn_momentum: Optional[np.ndarray] = None
+    # Total mechanical feedback, winds + SNe, log10(erg/s) and log10(dyn). Equal to
+    # wind_power / wind_momentum where no SN contributes (and everywhere when
+    # include_supernovae is False).
+    mechanical_luminosity: Optional[np.ndarray] = None
+    ram_force: Optional[np.ndarray] = None
+    # Per-star SN events for the populated mass rows: initial_mass, n_stars, t_death_yr,
+    # final_mass, ejecta_mass, momentum_per_sn [g cm/s], explodes (bool), and the constants.
+    supernova_events: Optional[Dict[str, Any]] = None
 
 
 def f(x, A, B):
@@ -988,7 +1062,8 @@ class StellarPopulationSynthesis:
                 if self.config.custom_star_numbers is not None:
                     No_stars = self._create_custom_star_numbers(
                         timestep_masses, self.config.custom_star_numbers
-                    )                    
+                    )
+                    imf_bin_edges = None
                     total_stars = np.sum(No_stars)
                     total_mass = np.sum(No_stars * timestep_masses)
                     print('Custom star distribution:')
@@ -997,6 +1072,7 @@ class StellarPopulationSynthesis:
                     No_stars, c_masses, dens, xmhigh, xmlow = self.calc_Nostars(
                         timestep_masses, self.config.imf_exponents, self.config.imf_mass_limits
                     )
+                    imf_bin_edges = (np.asarray(xmlow, float), np.asarray(xmhigh, float))
                 # Store No_stars as instance variable to emulate global access
                 self.No_stars = No_stars
             
@@ -1127,7 +1203,134 @@ class StellarPopulationSynthesis:
         print(f"Calculation completed in {elapsed_time:.2f} seconds")
         
         # Create final results object
-        return self._create_results_object(results, No_stars)
+        pop_results = self._create_results_object(results, No_stars)
+        self._attach_supernovae(pop_results, timestep_mass_ind, No_stars, imf_bin_edges)
+        return pop_results
+
+    def _sn_track_nodes(self):
+        """Initial mass, end age [yr] and final mass of every Geneva track (sorted by mass)."""
+        m0, t_end, m_fin = [], [], []
+        for ages, lums, masses in zip(self.track_data['ages'], self.track_data['luminosities'],
+                                      self.track_data['masses']):
+            ages = np.asarray(ages, float); lums = np.asarray(lums, float)
+            masses = np.asarray(masses, float)
+            live = np.nonzero(lums > -19.)[0]
+            last = live[np.argmax(ages[live])]
+            m0.append(masses[int(np.argmin(ages))]); t_end.append(ages[last]); m_fin.append(masses[last])
+        o = np.argsort(m0)
+        return np.array(m0)[o], np.array(t_end)[o], np.array(m_fin)[o]
+
+    def _sn_interpolators(self):
+        """t_d(M_ini) [yr] and M_final(M_ini): PCHIP in log-log through the track nodes."""
+        m0, t_end, m_fin = self._sn_track_nodes()
+        return loglog_pchip(m0, t_end), loglog_pchip(m0, m_fin)
+
+    def _supernova_events(self, timestep_mass_ind, n_stars):
+        """Death time, final mass and SN properties of every populated mass row.
+
+        The SN death time and final mass come from monotone PCHIP in (log M_ini, log y)
+        through the Geneva track ends (exact for track masses; see loglog_pchip). The row's
+        own track end (its last live point, linear in mass between tracks like every other
+        row quantity, where its light and winds stop) is kept as 't_death_row_yr'. A row explodes if
+        sn_mass_min <= M_ini <= sn_mass_max (the Starburst99 per-mass rule, on the nominal
+        track mass, see SN_MASS_RTOL); the ejecta
+        carry M_final - sn_remnant_mass and the momentum sqrt(2 E_SN M_ej) per SN.
+        """
+        cfg = self.config
+        rows = list(timestep_mass_ind)
+        m_ini = np.empty(len(rows)); t_d = np.empty(len(rows)); m_fin = np.empty(len(rows))
+        for k, i in enumerate(rows):
+            ages = np.asarray(self.grid_data['ages'][i], float)
+            lums = np.asarray(self.grid_data['luminosities'][i], float)
+            masses = np.asarray(self.grid_data['masses'][i], float)
+            live = np.nonzero(lums > -19.)[0]
+            last = live[np.argmax(ages[live])]      # oldest live point = end of the track
+            first = int(np.argmin(ages))            # age ~ 0: the initial mass
+            m_ini[k] = masses[first]
+            t_d[k] = ages[last]
+            m_fin[k] = masses[last]
+        t_row = t_d.copy()
+        f_t, f_m = self._sn_interpolators()
+        t_d = f_t(m_ini); m_fin = f_m(m_ini)
+        n = np.asarray(n_stars, float)
+        explodes = in_sn_window(m_ini, cfg.sn_mass_min, cfg.sn_mass_max)
+        m_ej = np.where(explodes, np.maximum(m_fin - cfg.sn_remnant_mass, 0.0), 0.0)
+        p_sn = np.where(explodes, np.sqrt(2.0 * cfg.sn_energy_erg * m_ej * MSUN_G), 0.0)
+        return {
+            'initial_mass': m_ini, 'n_stars': n, 't_death_yr': t_d, 'final_mass': m_fin,
+            't_death_row_yr': t_row, 'interpolation': 'pchip_loglog',
+            'ejecta_mass': m_ej, 'momentum_per_sn': p_sn, 'explodes': explodes,
+            'sn_energy_erg': cfg.sn_energy_erg, 'sn_mass_min': cfg.sn_mass_min,
+            'sn_mass_max': cfg.sn_mass_max, 'sn_remnant_mass': cfg.sn_remnant_mass,
+        }
+
+    @staticmethod
+    def centred_bin_edges(times):
+        """Edges of bins centred on ``times`` (midpoints; the end bins are symmetric)."""
+        t = np.asarray(times, float)
+        if len(t) == 1:
+            return np.array([t[0] - 0.5, t[0] + 0.5])
+        mid = 0.5 * (t[1:] + t[:-1])
+        return np.concatenate([[t[0] - (mid[0] - t[0])], mid, [t[-1] + (t[-1] - mid[-1])]])
+
+    @staticmethod
+    def deposit_events(edges, t_lo, t_hi, weights):
+        """Sum ``weights`` into bins, each spread uniformly over [t_lo, t_hi].
+
+        A zero-width interval is a point event in the bin containing it (left-closed
+        bins). Events outside [edges[0], edges[-1]) are dropped. Returns per-bin sums.
+        """
+        nb = len(edges) - 1
+        out = np.zeros(nb)
+        for a, b, w in zip(np.asarray(t_lo, float), np.asarray(t_hi, float), np.asarray(weights, float)):
+            if w == 0.0:
+                continue
+            if b < a:
+                a, b = b, a
+            if b == a:
+                j = np.searchsorted(edges, a, side='right') - 1
+                if 0 <= j < nb:
+                    out[j] += w
+                continue
+            lo = np.clip(edges[:-1], a, b); hi = np.clip(edges[1:], a, b)
+            out += w * (hi - lo) / (b - a)
+        return out
+
+    def _attach_supernovae(self, res, timestep_mass_ind, n_stars, imf_bin_edges):
+        """Add SN number, power and momentum per output bin, and the wind+SN totals."""
+        cfg = self.config
+        ev = self._supernova_events(timestep_mass_ind, n_stars)
+        res.supernova_events = ev
+        times = np.asarray(res.times, float)
+        edges = self.centred_bin_edges(times)
+        dt_s = np.diff(edges) * YEAR_S
+        mode = cfg.sn_time_deposition
+        if mode is None:
+            mode = 'point' if (cfg.custom_star_numbers is not None or imf_bin_edges is None) else 'spread'
+        if mode not in ('spread', 'point'):
+            raise ValueError(f"sn_time_deposition must be 'spread' or 'point', got {mode!r}")
+        if mode == 'spread' and imf_bin_edges is None:
+            raise ValueError("sn_time_deposition='spread' needs IMF mass bins (not custom_star_numbers)")
+        ev['time_deposition'] = mode
+        w_n = np.where(ev['explodes'], ev['n_stars'], 0.0)
+        if mode == 'spread':
+            f_t, _ = self._sn_interpolators()
+            xmlow, xmhigh = imf_bin_edges
+            t_lo = f_t(xmlow); t_hi = f_t(xmhigh)
+        else:
+            t_lo = t_hi = ev['t_death_yr']
+        if cfg.include_supernovae:
+            n_bin = self.deposit_events(edges, t_lo, t_hi, w_n)
+            p_bin = self.deposit_events(edges, t_lo, t_hi, w_n * ev['momentum_per_sn'])
+        else:
+            n_bin = np.zeros(len(times)); p_bin = np.zeros(len(times))
+        res.sn_number = n_bin
+        res.sn_power = n_bin * cfg.sn_energy_erg / dt_s
+        res.sn_momentum = p_bin / dt_s
+        wp = np.asarray(res.wind_power, float); wm = np.asarray(res.wind_momentum, float)
+        with np.errstate(divide='ignore'):
+            res.mechanical_luminosity = np.where(res.sn_power > 0, np.log10(10.**wp + res.sn_power), wp)
+            res.ram_force = np.where(res.sn_momentum > 0, np.log10(10.**wm + res.sn_momentum), wm)
     
     def _get_timestep_0_ind(self, timestep):
         """
@@ -2066,18 +2269,24 @@ class StellarPopulationSynthesis:
                 xmlow[mass_index] = 0.5 * (IMF_masses[mass_index] + IMF_masses[mass_index-1])
         
         dens = []
-        
-        # Calculate number density in each mass bin
-        if N_IMF_intervals == 2:
-            for mass_index in range(len(IMF_masses)):
-                dens_i = A[1] * (xmhigh[mass_index]**(1-IMF_exponents[1]) - 
-                               xmlow[mass_index]**(1-IMF_exponents[1])) / (1 - IMF_exponents[1])
-                dens.append(dens_i)
-        else:
-            for mass_index in range(len(IMF_masses)):
-                dens_i = A * (xmhigh[mass_index]**(1-IMF_exponents[0]) - 
-                            xmlow[mass_index]**(1-IMF_exponents[0])) / (1 - IMF_exponents[0])
-                dens.append(dens_i)
+
+        # Number of stars in each mass bin: integrate over every IMF segment the bin
+        # overlaps, with that segment's normalization and slope, clipped to the IMF
+        # limits.
+        A_seg = np.atleast_1d(A)
+        for mass_index in range(len(IMF_masses)):
+            dens_i = 0.0
+            for seg in range(len(IMF_exponents)):
+                lo = max(xmlow[mass_index], IMF_mass_limits[seg])
+                hi = min(xmhigh[mass_index], IMF_mass_limits[seg + 1])
+                if hi <= lo:
+                    continue
+                q = 1 - IMF_exponents[seg]
+                if q == 0:
+                    dens_i += A_seg[seg] * (np.log(hi) - np.log(lo))
+                else:
+                    dens_i += A_seg[seg] * (hi**q - lo**q) / q
+            dens.append(dens_i)
         
         N_stars = np.array(dens)
         total_mass = N_stars * IMF_masses

@@ -1,10 +1,10 @@
-"""Star formation mode: instantaneous burst vs constant SFR (needs feedback data).
+"""Star formation mode: instantaneous burst vs constant SFR (shipped feedback tables).
 
 The same total stellar mass can form in a single burst or be spread over a formation
 timescale. Constant SFR delays and lowers the feedback peak, which shifts the
 fragmentation time. This compares the two modes.
 
-Requires: `python scripts/download_data.py`.
+No download needed: the feedback tables ship with the package.
 """
 import os
 

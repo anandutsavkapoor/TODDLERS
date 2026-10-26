@@ -321,4 +321,4 @@ class TimeGridGenerator:
             self.logger.info(f"  Max: {np.max(dt) / MYR_TO_SEC:.3e} Myr")
             self.logger.info(f"  Mean: {np.mean(dt) / MYR_TO_SEC:.3e} Myr")
 
-        return np.around(grid, 2)
+        return grid

@@ -3,7 +3,7 @@
 Runs a deterministic SB99 evolution, then post-processes one shell timepoint with
 Cloudy to produce an emergent model. Demonstrates the second stage of TODDLERS.
 
-Requires: `python scripts/download_data.py`, plus `cloudy.exe` on PATH and a valid
+Requires the Cloudy stellar-continua tables (`python scripts/download_data.py`), plus `cloudy.exe` on PATH and a valid
 CLOUDY_DATA_DIR. A full grid would loop over all timepoints/models (run_full_simulation);
 here we run a single shell model to keep it quick.
 """

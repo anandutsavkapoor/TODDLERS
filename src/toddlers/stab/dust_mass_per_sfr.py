@@ -56,6 +56,7 @@ import os
 import glob
 import pickle
 import argparse
+import warnings
 
 import numpy as np
 
@@ -277,15 +278,36 @@ def build_interpolator(grid, Z_axis=None, eta_axis=None, n_axis=None):
         bounds_error=False, fill_value=None)  # fill_value=None -> linear extrapolation
 
 
-def evaluate_interpolator(interp, Z, eta, n_cl, f_dust=1.0):
+def evaluate_interpolator(interp, Z, eta, n_cl, f_dust=1.0, out_of_grid='warn'):
     """M_dust/SFR [yr] at (Z, eta, n_cl, f_dust) from a :func:`build_interpolator` object.
 
     Linear in f_dust; the caller is responsible for capping f_dust at 1 if desired.
+
+    The interpolator itself extrapolates linearly outside its (Z, eta, n_cl) box.
+    ``out_of_grid`` sets what happens to such points:
+    'warn' (default) returns the extrapolated values with one warning giving the count
+    and the box, 'raise' raises ValueError, 'clip' clamps the points to the box. The box
+    is read from ``interp.grid``, so a pickled interpolator works as it is.
     """
+    if out_of_grid not in ('warn', 'raise', 'clip'):
+        raise ValueError(f"out_of_grid must be 'warn', 'raise' or 'clip', got {out_of_grid!r}")
     Z = np.atleast_1d(np.asarray(Z, dtype=float))
     eta = np.broadcast_to(np.asarray(eta, dtype=float), Z.shape)
     n_cl = np.broadcast_to(np.asarray(n_cl, dtype=float), Z.shape)
     pts = np.column_stack((np.log10(Z), eta, np.log10(n_cl)))
+    lo = np.array([ax[0] for ax in interp.grid])
+    hi = np.array([ax[-1] for ax in interp.grid])
+    outside = np.any((pts < lo) | (pts > hi), axis=1)
+    if outside.any():
+        box = (f"Z [{10 ** lo[0]:.3g}, {10 ** hi[0]:.3g}], eta [{lo[1]:.3g}, {hi[1]:.3g}], "
+               f"n_cl [{10 ** lo[2]:.3g}, {10 ** hi[2]:.3g}] cm^-3")
+        msg = f"{int(outside.sum())} of {outside.size} points outside the M_dust/SFR grid ({box})"
+        if out_of_grid == 'raise':
+            raise ValueError(msg)
+        if out_of_grid == 'clip':
+            pts = np.clip(pts, lo, hi)
+        else:
+            warnings.warn(msg + "; values are linearly extrapolated", UserWarning, stacklevel=2)
     out = f_dust * 10.0 ** np.asarray(interp(pts), dtype=float)
     return out if out.size > 1 else float(out[0])
 

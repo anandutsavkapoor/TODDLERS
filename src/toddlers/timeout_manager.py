@@ -69,13 +69,15 @@ class TimeoutManager:
 
 
 class LogStallWatchdog:
-    """Escalate a long operation when its *log file stops growing*, not after a flat cap.
+    """Escalate a long operation when it *stops making progress*, not after a flat cap.
 
     A flat wall-clock timeout punishes a slow-but-progressing run (it kills it even while
     it is still advancing) and is slow to react to a genuinely stuck one. This watchdog
-    instead polls the operation's log file: as long as the file keeps growing the run is
-    left alone, however slow; only when it has produced **no new output for
-    ``stall_timeout`` seconds** is it interrupted. ``hard_cap`` is a generous absolute
+    instead polls a progress signal: the ``progress()`` callable when given (the evolution
+    passes its count of state tables, so a heartbeat or a repeated warning is not progress),
+    else the size of the operation's log file. As long as the signal changes the run is
+    left alone, however slow; only when it has **not changed for ``stall_timeout``
+    seconds** is it interrupted. ``hard_cap`` is a generous absolute
     backstop (and the sole trigger when there is no log file to watch, e.g. a null
     logger). It raises ``TimeoutError`` -- exactly like :class:`TimeoutManager` -- so any
     existing escalation/retry logic around it is unchanged.
@@ -87,10 +89,13 @@ class LogStallWatchdog:
             long_running_operation()
     """
 
-    def __init__(self, log_path, stall_timeout, poll=60, hard_cap=None):
+    def __init__(self, log_path, stall_timeout, poll=60, hard_cap=None, progress=None):
         """
         Args:
             log_path (str|None): file whose growth signals progress; None -> hard_cap only.
+            progress (callable|None): if given, progress is a change of ``progress()`` instead
+                of the file size, so lines that are not progress (a heartbeat, a repeated
+                warning) cannot hide a stall; a None value means nothing to watch.
             stall_timeout (int): seconds of no log growth that triggers escalation.
             poll (int): how often (s) to check for growth (>=1; SIGALRM is integer-second).
             hard_cap (int|None): absolute wall-clock ceiling, in seconds, as a backstop.
@@ -99,9 +104,12 @@ class LogStallWatchdog:
         self.stall_timeout = int(stall_timeout)
         self.poll = max(1, int(poll))
         self.hard_cap = int(hard_cap) if hard_cap else None
+        self.progress = progress
         self.original_handler = None
 
     def _size(self):
+        if self.progress is not None:
+            return self.progress()
         try:
             return os.path.getsize(self.log_path) if self.log_path else None
         except OSError:
@@ -124,7 +132,7 @@ class LogStallWatchdog:
             self._stalled += self.poll
             if self._stalled >= self.stall_timeout:
                 raise TimeoutError(
-                    f"Log '{self.log_path}' made no progress for "
+                    f"Run logged by '{self.log_path}' made no progress for "
                     f">= {self.stall_timeout} seconds (stalled) -> escalating")
         signal.alarm(self.poll)
 

@@ -28,15 +28,53 @@ def parse_f_dust(name):
     return float(m.group(1)) if m else 1.0
 
 
+def to_plain(value):
+    """``value`` with numpy scalars and arrays turned into plain Python types (bool, int,
+    float, str, list), recursively through dicts, lists and tuples, so ``json.dump`` takes it.
+    Used for the .dat parameters (the ``inputs`` record keys the cache, so a numpy-typed
+    constructor argument and its plain twin give the same record)."""
+    if isinstance(value, dict):
+        return {k: to_plain(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [to_plain(v) for v in value]
+    if isinstance(value, np.ndarray):
+        return to_plain(value.tolist())
+    if isinstance(value, np.generic):
+        return value.item()
+    return value
+
+
+def json_default(value):
+    """``default=`` hook for json.dump: numpy scalars and arrays as plain types (to_plain);
+    anything else raises TypeError as json does."""
+    plain = to_plain(value)
+    if plain is value:
+        raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
+    return plain
+
+
+def output_root_of(path):
+    """The output root an evolution path lives under: the parent of the last
+    ``evolution_output`` component of ``path`` (a .dat file or a directory below
+    ``evolution_output/``), or None if the path is outside that layout. The Cloudy stage writes
+    ``cloudy_output/`` under this root, and every reader of Cloudy output uses the same rule."""
+    parts = os.path.abspath(path).split(os.sep)
+    if EVOLUTION_OUTPUT_DIR not in parts:
+        return None
+    i = len(parts) - 1 - parts[::-1].index(EVOLUTION_OUTPUT_DIR)
+    return os.sep.join(parts[:i]) or os.sep
+
+
 def resolve_output_root(default_root):
-    """Base directory under which ``cloudy_output/`` (and ``evolution_output/``) live.
+    """Base directory under which ``evolution_output/``, ``evolution_logs/`` and ``cloudy_output/``
+    live. An ``Evolution(output_root=...)`` argument takes precedence for the evolution stage;
+    the Cloudy stage takes its own ``output_root`` argument, then the root recorded in the
+    evolution .dat, then this rule.
 
     Returns ``$TODDLERS_OUTPUT_ROOT`` when set, else ``default_root``. Cloudy output is large
     (~0.5 TiB per dust-to-metal value on a full grid), so it must be relocatable onto scratch
-    rather than living inside the package install tree. Historically the location was hardcoded
-    to the package's parent dir (``dirname(dirname(__file__))``), which is wrong for a read-only
-    or relocated install and forces a symlink hack; this env override sets it cleanly. The
-    default preserves the original behavior, so nothing changes unless the variable is set.
+    rather than living inside the package install tree (a read-only or relocated install
+    needs this).
     """
     return os.environ.get("TODDLERS_OUTPUT_ROOT") or default_root
 
@@ -339,22 +377,36 @@ def format_value(value, format_spec):
     scalar_value = get_scalar(value)
     return format(scalar_value, format_spec)
 
+# State-table layout: one width set for the borders and every row.
+TABLE_LABEL_W, TABLE_VALUE_W, TABLE_UNIT_W = 26, 14, 16
+TABLE_BORDER = ("+" + "-" * (TABLE_LABEL_W + 2) + "+" + "-" * (TABLE_VALUE_W + 2) + "+"
+                + "-" * (TABLE_UNIT_W + 2) + "+")
+
+
+def table_title(text):
+    """A full-width title row of a state table."""
+    return f"| {text:<{len(TABLE_BORDER) - 4}} |"
+
+
+def _format_number(v):
+    v = get_scalar(v)
+    if isinstance(v, (bool, np.bool_)):
+        return str(bool(v))
+    if isinstance(v, (int, np.integer)):
+        return str(int(v))
+    return format_value(v, '.2e') if (abs(v) > 1000 or abs(v) < 0.01) and v != 0 else format_value(v, '.2f')
+
+
 def format_row(label, value, unit):
-    """Format a row for tabular output."""
-    if isinstance(value, (int, float)) or np.issubdtype(type(value), np.number):
-        scalar_value = get_scalar(value)
-        if abs(scalar_value) > 1000 or abs(scalar_value) < 0.01:
-            formatted_value = format_value(scalar_value, '.2e')
-        else:
-            formatted_value = format_value(scalar_value, '.2f')
-    elif isinstance(value, bool):
-        formatted_value = str(value)
+    """Format a row for tabular output (as wide as TABLE_BORDER)."""
+    if isinstance(value, (bool, np.bool_, int, float, np.number)):
+        formatted_value = _format_number(value)
     elif isinstance(value, (list, np.ndarray)):
-        formatted_value = "[" + ", ".join(format_value(get_scalar(v), '.2e') if abs(get_scalar(v)) > 1000 or abs(get_scalar(v)) < 0.01 else format_value(get_scalar(v), '.2f') for v in value) + "]"
+        formatted_value = "[" + ", ".join(_format_number(v) for v in value) + "]"
     else:
         formatted_value = str(value)
-
-    return f"| {label:<25} | {formatted_value:>15} | {unit:<25} |"
+    return (f"| {label:<{TABLE_LABEL_W}} | {formatted_value:>{TABLE_VALUE_W}} | "
+            f"{unit.strip():<{TABLE_UNIT_W}} |")
 
 def calculate_injection_energy(f_esc, Q_i, dt, fudge_factor):
     """
@@ -525,7 +577,8 @@ def identify_spurious_data(data, log=False , prominence=0.5, window_size=3, thre
     
     return mask
 
-def generate_spectral_table_filename(template, imf, star_type, formation_timescale=None, wavelength_resolution_factor=1):
+def generate_spectral_table_filename(template, imf, star_type, formation_timescale=None, wavelength_resolution_factor=1,
+                                     resample='decimate'):
     """
     Generate an appropriate filename for the spectral table based on its characteristics.
 
@@ -535,6 +588,8 @@ def generate_spectral_table_filename(template, imf, star_type, formation_timesca
         star_type (str): Type of stars ('binary' or 'single').
         formation_timescale (float, optional): Formation timescale in years for constant SFR mode.
         wavelength_resolution_factor (int, optional): Factor by which wavelength resolution is degraded.
+        resample (str, optional): 'decimate' (suffix _resFacN, the released tables) or
+            'average' (suffix _resAvgN); no suffix when the factor is 1.
 
     Returns:
         str: The generated filename.
@@ -557,7 +612,11 @@ def generate_spectral_table_filename(template, imf, star_type, formation_timesca
 
     # Add wavelength resolution factor if it's not 1
     if wavelength_resolution_factor != 1:
-        filename += f"_resFac{wavelength_resolution_factor}"
+        tags = {'decimate': 'resFac', 'average': 'resAvg'}
+        if resample not in tags:
+            raise ValueError(f"resample must be 'decimate' or 'average', got {resample!r}")
+        tag = tags[resample]
+        filename += f"_{tag}{wavelength_resolution_factor}"
 
     # Add file extension
     filename += ".ascii"
@@ -684,10 +743,15 @@ def get_shell_inner_face_density(F, R, Z, Q_i, temp_interpolator=None, fix_n=Fal
     Args:
         F (float): Total force on shell in dynes
         R (float): Shell radius in cm  
-        Z (float): Gas metallicity in solar units
+        Z (float): Gas metallicity as a mass fraction (e.g. 0.014), not in solar units
         Q_i (float): Ionizing photon rate in s^-1
-        temp_interpolator (callable, optional): Function that returns gas temperature from 
-            density, metallicity and ionizing flux
+        temp_interpolator (callable, optional): database/Hii_temperature_interpolator.obj, a
+            linear RegularGridInterpolator over (log10 Z, log10 n [cm^-3], log10 phi
+            [photons cm^-2 s^-1]) returning log10 T [K]. Grid: Z = 0.001-0.04 (mass
+            fraction, 5 nodes), n = 1e-3-1e6 (10), phi = 10^4.22-10^18.22 (11);
+            bounds_error=True: a Z (or phi) outside the grid makes the root search fall
+            back to N_FALLBACK with a RuntimeWarning, and the final temperature lookup
+            then raises ValueError (out of bounds).
         fix_n (bool, optional): If True, skip root finding and use N_FALLBACK. Default False.
 
     Returns:

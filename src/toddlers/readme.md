@@ -11,6 +11,8 @@ The main class coordinating the evolution of stellar feedback-driven shells.
 - **Shell Properties**: Tracks radius, velocity, mass, and energetics
 - **State Management**: Maintains and updates physical state variables
 - **Cloud Profile**: Manages dynamic cloud density evolution
+- **Stochastic populations**: with `template='pySB99', imf=None, stochastic=StochasticSpec(...)` each star-forming generation draws its own stars at run time
+- **Output**: one `.dat` per run under the output root (`output_root` argument, else `$TODDLERS_OUTPUT_ROOT`, else the directory that holds the package, `src/`); it records the inputs, the feedback table and a run record, and is reused only when they match
 
 #### Main Methods:
 ```python
@@ -90,6 +92,7 @@ Coordinates Cloudy calculations.
 - Manages multiple model types (shell, unified, DIG)
 - Handles time sampling (adaptive/uniform)
 - Processes Cloudy outputs
+- Writes `cloudy_output/` next to the `evolution_output/` that holds the `.dat` it reads
 - Error handling and logging
 
 ```python
@@ -113,8 +116,8 @@ def get_output_options(self, grains=True, dissolved=False, save_elements=False,
                         save_cooling=True, save_opacities=False, line_list_version='v2')
 ```
 - The output options are self-explanatory
-- The lines' lists sit in src/database/lines_list/
-- v2 option is compatible with Cloudy-23
+- The line list sits in src/toddlers/database/lines_list/cloudy_lines_TODDLERS_v2.dat (148 lines), built by get_lines_list.py there from Cloudy's LineList_HII.dat, LineList_PDR_H2.dat and LineList_HeH.dat (shipped next to it; the script regenerates the list byte for byte). All 148 labels appear verbatim in the line lists of Cloudy master 013dc0bf, the build of the released grids.
+- 'v2' is the only accepted line_list_version; the v1 list of the first TODDLERS build is legacy and kept for comparison only in docs/legacy/.
 
 #### ShellModelGenerator (`cloudy_shell_model_generator.py`)
 Generates shell-only models:
@@ -362,6 +365,11 @@ def write_input_file(self, t):
 
 This class manages the generation of custom grain size distributions and opacity file generation for Cloudy simulations. 
 See Hazy for more details of the grains code in Cloudy. CloudyGrainsGenerator also generates input commands for Cloudy.
+
+Generated files and reuse (2.1.0):
+- `ratio<NNN>_exp<n>.szd` (NNN = ratio x 1000; ratios must have at most 3 decimals) is written into the Cloudy data directory only when its content changes, through a temporary file renamed into place.
+- `<material>_ratio<NNN>_exp<n>_<bins>.opc` is compiled by Cloudy and gets a sidecar `<opc>.meta.json` with its key (szd and rfi md5, n_bins, ratio, md5 of the Cloudy executable) and the Cloudy version line from the .opc header. The file is reused only when the sidecar matches; otherwise (no sidecar, edited file, changed recipe or Cloudy build) the old file is moved to `stale_tables/<UTC time>/` and compiled again, once, under a lock directory `<opc>.lock`. A failed compile (non-zero exit, no .opc) raises.
+- A ratio below 0.05 uses Cloudy's own `<material>_orion_10.opc`, with a warning, an entry in `orion_fallbacks` and a comment line in the Cloudy input.
 
 #### Size Distribution Creation
 

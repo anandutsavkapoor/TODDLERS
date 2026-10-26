@@ -27,19 +27,50 @@ import lzma
 import numpy as np
 from urllib.parse import urljoin
 from typing import Optional, Tuple
-from toddlers.cloudy_stellar_spectra_generator import SpectralTableGenerator
+from toddlers.cloudy_stellar_spectra_generator import (SpectralTableGenerator,
+                                                       bpass_burst_source_path,
+                                                       RELEASED_TABLE_MD5)
 from toddlers.constants import *
 
-GOOGLE_DRIVE_ID = '12Gk6wJAjtft5huRbl9RJyiD8vscOIjT_'
+from toddlers._paths import data_resources
+
+# Drive ids and md5s come from the package's versioned resources file (data_resources.json):
+# a new data version is a new Drive file and a new entry, so released code keeps its own data.
+RESOURCES = data_resources()
+GOOGLE_DRIVE_ID = RESOURCES['cloudy_resources']['drive_id']
 MARKER_FILE = 'BPASS_chab100_bin_constantSFR_t2.0e+00myr_resFac10.ascii'
 
-# Google Drive id for the single-star feedback database single_star_tracks.h5 (~556 MB,
-# needed by the stochastic IMF sampler). Set this after uploading the file to Drive and
-# sharing it "anyone with the link". Until then, --stochastic-tracks points users at the
-# reproducible local build (examples/build_stochastic_database.py).
-SINGLE_STAR_TRACKS_DRIVE_ID = '1qfTIy8HLmsaJRjeyRIoNYTmfkPf5x8Lw'
-# Expected MD5 of single_star_tracks.h5; a download that does not match is corrupt/truncated.
-SINGLE_STAR_TRACKS_MD5 = '48e953759dcb0dd54d00111b5f2c1a5d'
+# md5 of the full-resolution BPASS v2.2.1 burst tables on data.nublado.org: the .xz as
+# downloaded and the decompressed .ascii the generator reads (recorded
+# for 2.1.0; the chab100 binary .ascii also matches the copy used for the released
+# resFac10 tables). A download that does not match is refused.
+BPASS_SOURCE_MD5 = {
+    'BPASSv2.2.1_imf_chab100_burst_single.ascii': {'xz': '4c34614c35632671297a164272daeeec',
+                                                   'ascii': 'da04ed1cb822c2511054894cdc8a2c2a'},
+    'BPASSv2.2.1_imf_chab100_burst_binary.ascii': {'xz': 'c75f9188abf14710f2739a4285ca550a',
+                                                   'ascii': '0601d41d78e533fd99450556c2a536c3'},
+    'BPASSv2.2.1_imf_chab300_burst_single.ascii': {'xz': '50914ce3635f105e75006c16e52d8c45',
+                                                   'ascii': 'a64444fa7189e77fe9cf9635b9a4dd5b'},
+    'BPASSv2.2.1_imf_chab300_burst_binary.ascii': {'xz': '6bf6b5cf326e03042e0aba208de6b417',
+                                                   'ascii': 'f8667d3525317e7ddd96e125c11fbc08'},
+}
+
+
+def _md5(path: str) -> str:
+    import hashlib
+    h = hashlib.md5()
+    with open(path, 'rb') as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b''):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+# The single-star feedback database (needed by the stochastic IMF sampler): Drive id and md5
+# of this version from data_resources.json (a null id would point users at the local build,
+# examples/build_stochastic_database.py).
+SINGLE_STAR_TRACKS_DRIVE_ID = RESOURCES['single_star_tracks']['drive_id']
+SINGLE_STAR_TRACKS_MD5 = RESOURCES['single_star_tracks']['md5']
+SINGLE_STAR_TRACKS_VERSION = RESOURCES['single_star_tracks']['version']
 # Below this many MB a "downloaded" file is treated as a failure (e.g. an HTML error page).
 _TRACKS_MIN_MB = 50
 
@@ -146,7 +177,10 @@ def download_bpass_table(imf: str, star_type: str,
         bool: True if successful, False otherwise
         
     Notes:
-        - Downloads compressed file from data.nublado.org to others/Cloudy Spectra
+        - Downloads compressed file from data.nublado.org to src/others/Cloudy Spectra
+          (bpass_burst_source_path: where SpectralTableGenerator reads it)
+        - Checks the md5 of the .xz and of the decompressed table (BPASS_SOURCE_MD5);
+          a mismatch is refused and the downloaded files are removed
         - Uses SpectralTableGenerator to process and format the file
         - Automatically saves to Cloudy data directory with correct naming
         - Cleans up temporary files and directories if cleanup=True
@@ -161,20 +195,20 @@ def download_bpass_table(imf: str, star_type: str,
         print(f"Invalid IMF: {imf}. Must be 'chab100' or 'chab300'")
         return False
 
-    # Get base project directory
-    src_dir = os.path.abspath(__file__)
-    project_root = os.path.dirname(src_dir)
-        
-    # Construct URL and filename
-    base_url = "https://data.nublado.org/stars/bpass/v2.2.1/"
-    download_filename = f"BPASSv2.2.1_imf_{imf}_burst_{star_type_map[star_type]}.ascii"
-    url = urljoin(base_url, download_filename + ".xz")
-    
-    # Construct paths
-    cloudy_spectra_dir = os.path.join(project_root, "others", "Cloudy Spectra")
+    # The generator reads the source table from bpass_burst_source_path; write it there.
+    temp_file = bpass_burst_source_path(imf, star_type)
+    download_filename = os.path.basename(temp_file)
+    cloudy_spectra_dir = os.path.dirname(temp_file)
     os.makedirs(cloudy_spectra_dir, exist_ok=True)
-    temp_file = os.path.join(cloudy_spectra_dir, download_filename)
     temp_compressed = temp_file + ".xz"
+
+    # Construct URL
+    base_url = "https://data.nublado.org/stars/bpass/v2.2.1/"
+    url = urljoin(base_url, download_filename + ".xz")
+    expected = BPASS_SOURCE_MD5.get(download_filename)
+    if expected is None:
+        print(f"No pinned md5 for {download_filename}; refusing an unchecked download.")
+        return False
     
     # Check if final file already exists in Cloudy directory
     final_filename = f"BPASS_{imf}_{star_type}_burst.ascii"
@@ -196,6 +230,13 @@ def download_bpass_table(imf: str, star_type: str,
             for chunk in response.iter_content(chunk_size=8192):
                 f.write(chunk)
                 
+        got = _md5(temp_compressed)
+        if got != expected['xz']:
+            print(f"Error: MD5 mismatch for {download_filename}.xz (got {got}, expected "
+                  f"{expected['xz']}); download refused.")
+            os.remove(temp_compressed)
+            return False
+
         # Decompress file to Cloudy Spectra directory
         print(f"Decompressing to {download_filename}...")
         with lzma.open(temp_compressed) as compressed:
@@ -204,6 +245,13 @@ def download_bpass_table(imf: str, star_type: str,
         
         # Always remove the compressed file
         os.remove(temp_compressed)
+
+        got = _md5(temp_file)
+        if got != expected['ascii']:
+            print(f"Error: MD5 mismatch for {download_filename} (got {got}, expected "
+                  f"{expected['ascii']}); refused.")
+            os.remove(temp_file)
+            return False
         
         # Process using SpectralTableGenerator
         print("Processing with SpectralTableGenerator...")
@@ -279,6 +327,31 @@ def download_all_bpass_tables(cloudy_data_dir: str) -> None:
             
     print(f"\nDownloaded {success_count} out of {len(combinations)} BPASS tables")
 
+def _move_aside(path: str) -> str:
+    """Move a data file that is not this version's into stale_data/<UTC time>/ next to it
+    (never delete); return the new path."""
+    from datetime import datetime, timezone
+    stamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
+    dest_dir = os.path.join(os.path.dirname(path), 'stale_data', stamp)
+    os.makedirs(dest_dir, exist_ok=True)
+    dest = os.path.join(dest_dir, os.path.basename(path))
+    os.replace(path, dest)
+    return dest
+
+
+def list_resources() -> None:
+    """Print the versioned resources of this code version and whether each is installed."""
+    from toddlers._paths import get_database_path
+    for name, r in sorted(RESOURCES.items()):
+        state = ''
+        if name == 'single_star_tracks':
+            p = get_database_path()
+            state = ('current' if os.path.exists(p) and _md5(p) == r['md5']
+                     else 'other version' if os.path.exists(p) else 'missing')
+        print(f"{name:20s} v{r['version']:8s} md5 {r['md5']}  drive "
+              f"{r['drive_id'] or '(not uploaded yet)'}  {state}")
+
+
 def download_file(destination: str) -> Optional[str]:
     """
     Download the main TODDLERS resource file from Google Drive.
@@ -300,12 +373,18 @@ def download_file(destination: str) -> Optional[str]:
         sys.exit(1)
 
     url = f"https://drive.google.com/uc?id={GOOGLE_DRIVE_ID}"
-    return gdown.download(url, destination, quiet=False)
+    out = gdown.download(url, destination, quiet=False)
+    want = RESOURCES['cloudy_resources']['md5']
+    if out and want and _md5(destination) != want:
+        print(f"Error: the resource bundle md5 is not {want}; download is corrupt. Removing it.")
+        os.remove(destination)
+        return None
+    return out
 
 def download_single_star_tracks(overwrite: bool = False) -> bool:
     """Download the single-star feedback database (``single_star_tracks.h5``) from Google Drive.
 
-    This ~556 MB track library is what the stochastic IMF sampler needs. It is not shipped
+    This track library (~583 MB) is what the stochastic IMF sampler needs. It is not shipped
     in the repository (too large) and is not part of the Cloudy-resources bundle; this
     fetches it into the resolved data directory (``get_database_path()``, i.e.
     ``$TODDLERS_DATA`` or ``<package>/database``). It does NOT require Cloudy.
@@ -326,15 +405,23 @@ def download_single_star_tracks(overwrite: bool = False) -> bool:
         return False
 
     dest = get_database_path()
-    if os.path.exists(dest) and not overwrite:
-        size_mb = os.path.getsize(dest) / 1e6
-        print(f"single_star_tracks.h5 already present ({size_mb:.0f} MB) at {dest}; "
-              f"skipping (use --overwrite to refetch).")
-        return True
+    if os.path.exists(dest):
+        if not overwrite and _md5(dest) == SINGLE_STAR_TRACKS_MD5:
+            print(f"single_star_tracks.h5 v{SINGLE_STAR_TRACKS_VERSION} already present at {dest}; "
+                  f"skipping (use --overwrite to refetch).")
+            return True
+        if not SINGLE_STAR_TRACKS_DRIVE_ID:
+            print(f"{dest} is not the v{SINGLE_STAR_TRACKS_VERSION} database (md5 "
+                  f"{SINGLE_STAR_TRACKS_MD5}), and that version is not on Drive yet; kept as is.")
+            print("Build it locally instead:  python examples/build_stochastic_database.py")
+            return False
+        moved = _move_aside(dest)
+        print(f"{os.path.basename(dest)} is not the v{SINGLE_STAR_TRACKS_VERSION} database; "
+              f"moved it to {moved} and downloading the current one.")
 
     if not SINGLE_STAR_TRACKS_DRIVE_ID:
-        print("single_star_tracks.h5 download is not configured yet "
-              "(SINGLE_STAR_TRACKS_DRIVE_ID is unset in download_data.py).")
+        print(f"single_star_tracks.h5 v{SINGLE_STAR_TRACKS_VERSION} is not on Drive yet "
+              f"(drive_id unset in toddlers/data_resources.json).")
         print("Build it locally instead:  python examples/build_stochastic_database.py")
         return False
 
@@ -346,7 +433,7 @@ def download_single_star_tracks(overwrite: bool = False) -> bool:
 
     os.makedirs(os.path.dirname(dest), exist_ok=True)
     url = f"https://drive.google.com/uc?id={SINGLE_STAR_TRACKS_DRIVE_ID}"
-    print(f"Downloading single_star_tracks.h5 (~556 MB) to {dest} ...")
+    print(f"Downloading single_star_tracks.h5 (~{RESOURCES['single_star_tracks']['size_mb']} MB) to {dest} ...")
     # NB: no fuzzy= kwarg -- it was dropped in gdown 6.x and isn't needed for an
     # explicit uc?id= URL (gdown still handles the large-file confirm token).
     out = gdown.download(url, dest, quiet=False)
@@ -355,21 +442,16 @@ def download_single_star_tracks(overwrite: bool = False) -> bool:
         return False
     size_mb = os.path.getsize(dest) / 1e6
     if size_mb < _TRACKS_MIN_MB:
-        print(f"Warning: downloaded file is only {size_mb:.1f} MB (expected ~556 MB); "
+        print(f"Warning: downloaded file is only {size_mb:.1f} MB (expected ~{RESOURCES['single_star_tracks']['size_mb']} MB); "
               f"the Drive link may be wrong or rate-limited. Inspect {dest}.")
         return False
-    if SINGLE_STAR_TRACKS_MD5:
-        import hashlib
-        h = hashlib.md5()
-        with open(dest, 'rb') as fh:
-            for chunk in iter(lambda: fh.read(1 << 20), b''):
-                h.update(chunk)
-        if h.hexdigest() != SINGLE_STAR_TRACKS_MD5:
-            print(f"Error: MD5 mismatch (got {h.hexdigest()}, expected "
-                  f"{SINGLE_STAR_TRACKS_MD5}); download is corrupt. Removing {dest}.")
-            os.remove(dest)
-            return False
-    print(f"single_star_tracks.h5 installed ({size_mb:.0f} MB).")
+    got = _md5(dest)
+    if got != SINGLE_STAR_TRACKS_MD5:
+        print(f"Error: MD5 mismatch (got {got}, expected {SINGLE_STAR_TRACKS_MD5}); "
+              f"download is corrupt. Removing {dest}.")
+        os.remove(dest)
+        return False
+    print(f"single_star_tracks.h5 v{SINGLE_STAR_TRACKS_VERSION} installed ({size_mb:.0f} MB).")
     return True
 
 
@@ -423,6 +505,17 @@ def extract_and_organize(zip_path: str, extract_path: str) -> bool:
         if os.path.exists(zip_path):
             os.remove(zip_path)
 
+def check_released_star_tables(data_dir: str) -> list:
+    """Names of the released star tables (RELEASED_TABLE_MD5) that are missing from
+    data_dir or differ from their released md5; empty if all match."""
+    bad = []
+    for name, md5 in sorted(RELEASED_TABLE_MD5.items()):
+        p = os.path.join(data_dir, name)
+        if not os.path.exists(p) or _md5(p) != md5:
+            bad.append(name)
+    return bad
+
+
 def main():
     """
     Main function to download and organize TODDLERS data files.
@@ -454,7 +547,12 @@ def main():
                       help='Download single_star_tracks.h5 (stochastic sampler DB); does not need Cloudy')
     parser.add_argument('--overwrite', action='store_true',
                       help='With --stochastic-tracks: refetch even if the file is already present')
+    parser.add_argument('--list', action='store_true',
+                      help='List the versioned data resources of this code version and exit')
     args = parser.parse_args()
+    if args.list:
+        list_resources()
+        return 0
 
     print("Starting TODDLERS data installation check...")
 
@@ -503,6 +601,11 @@ def main():
     if download_file(zip_path):
         print("Download complete. Extracting and organizing files...")
         if extract_and_organize(zip_path, cloudy_data_dir):
+            bad = check_released_star_tables(cloudy_data_dir)
+            if bad:
+                print("Error: these installed star tables do not have the released md5 "
+                      "(RELEASED_TABLE_MD5): " + ", ".join(bad))
+                return 1
             print(f"Data successfully installed in {cloudy_data_dir}")
             return 0
     

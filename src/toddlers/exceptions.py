@@ -17,6 +17,11 @@ class NegativeEnergyError(Exception):
         self.P_b = P_b
         self.identifier = "NEGATIVE_ENERGY_OR_PRESSURE"
 
+class ConfigurationError(ValueError):
+    """A run's inputs or internal records are inconsistent: deterministic, so no other solver
+    or tolerance can fix it, and Evolution.run_simulation raises it at once instead of retrying.
+    A subclass of ValueError, so callers that catch ValueError also catch it."""
+
 @contextmanager
 def capture_output():
     """Capture output of stdout and stderr."""

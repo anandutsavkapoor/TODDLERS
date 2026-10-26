@@ -68,7 +68,7 @@ RTOL_MAIN_PH1  = 1e-6  # Relative tolerance for main solver, phase-1
 RTOL_MAIN_FRAG = 1e-6  # Relative tolerance for main solver, fragmentation
 RTOL_MAIN_PH2  = 1e-5  # Relative tolerance for main solver, phase-2
 SIMULATION_TIMEOUT = 3600 * 2 # 2 hours in seconds (absolute backstop per attempt)
-STALL_TIMEOUT = 60 * 45 # escalate an attempt if its log stops growing for 45 min
+STALL_TIMEOUT = 60 * 45 # escalate an attempt if no new state table is logged for 45 min
 LOOSER_RTOL = RTOL_MAIN_PH1  * 1.25  # Looser relative tolerance for third attempt
 MAX_STEP_PH1  = 3e-3*MYR_TO_SEC # max step allowed, phase-1
 MAX_STEP_FRAG = 3e-3*MYR_TO_SEC # max step allowed, fragmentation
@@ -103,7 +103,6 @@ Z_MIN_BPASS = 1e-5
 Z_MAX_BPASS = 0.04
 Z_MIN_SB99 = 0.001
 Z_MAX_SB99 = 0.04
-Z_KROUPA120_ROT = 0.014  # Single metallicity for Kroupa 120 rotational model
 Z_VALUES_BPASS = np.array([1e-5, 1e-4, 0.001, 0.002, 0.003, 0.004, 0.006, 0.008, 0.010, 0.014, 0.020, 0.030, 0.040])
 Z_VALUES_SB99 = np.array([0.001, 0.004, 0.008, 0.020, 0.040])
 
@@ -157,6 +156,7 @@ ORION_LIKE_RATIO = 0.01  # below this model starts to be like the "Orion" grains
 Z_SOLAR_GASS10 = 0.014 # new estimates, same as in TODDLERS v1
 BPASS_REDUCE_RES_FAC = 10 # reduce wavelength resolution by this factor, BPASS (the shipped v2 BPASS tables/STABs use resFac10)
 SB99_REDUCE_RES_FAC = 1 # reduce wavelenth resolution by this factor, SB99
+STAR_TABLE_RESAMPLE = 'decimate' # how the factor is applied: 'decimate' (released v2 tables) or 'average' (keeps the integral; tables named _resAvgN)
 NUM_STELLAR_SPEC_CLOUDY = 75 # spectra bw 1e5 yr and tmax in the cloudy ascii
 
 TRANSITION_FACTOR_SHELL_CLOUD = 1.1 # 10%

@@ -84,9 +84,15 @@ def _write_outputs(run_dir, prefix, time=TIME, *, ok=True, diffcont=True,
             continue
         with open(p(ext), "w") as f:
             f.write(content)
+    # diffcont: True/"patched" = the patched header; "stock" = what a stock Cloudy writes
+    # for `save diffuse continuum unattenuated`: its parser matches DIFF only and writes
+    # the standard diffuse-continuum header (Cloudy parse_save.cpp:738 at 013dc0bf and
+    # 01c4cfc6); False = no file at all.
     if diffcont:
+        header = ("#energy/um\tConEmitLocal\tDiffuseLineEmission\tTotal\n" if diffcont == "stock"
+                  else "#energy/um\tDiffContUnatt\tDiffContAtt\n")
         with open(p("diffContUnatt"), "w") as f:
-            f.write("#energy/um\tDiffContUnatt\tDiffContAtt\n1.0 2.0 3.0\n")
+            f.write(header + "1.0 2.0 3.0\n")
 
 
 # =========================================================================== input-level
@@ -100,7 +106,7 @@ class TestInputIntegrity:
         assert h.check_input_exists() is True
 
     def test_truncated_stub_rejected(self, tmp_path, monkeypatch):
-        # The exact failure that re-armed the campaign: 3-line stub, no density/save block.
+        # A 3-line stub (a worker killed mid-generation), no density/save block.
         monkeypatch.chdir(tmp_path)
         _write_input(tmp_path, "shell", _TRUNCATED_IN)
         h = CloudyOutputHandler("shell", TIME, parse_data=False)
@@ -293,7 +299,14 @@ class TestRunnerSelfHeal:
 
 
 class TestPatchCheck:
-    """The one-time [patch-check] warning when the binary lacks the unattenuated patch."""
+    """The one-time [patch-check] warning when the binary lacks the unattenuated patch.
+
+    A stock Cloudy DOES write .diffContUnatt, with
+    the standard diffuse-continuum header (ConEmitLocal ...), so "file present and
+    non-empty" cannot tell a stock build from a patched one. Bar: the check reads the
+    header; 'DiffContUnatt' present = patched (silent), anything else (stock header, no
+    file) = one warning per worker.
+    """
 
     @pytest.fixture
     def sim_file(self, tmp_path):
@@ -312,8 +325,29 @@ class TestPatchCheck:
         runner.run_cloudy_task({"sim_file": sim_file, "time": TIME, "phase": "shell", "add_dig": False})
         first = capsys.readouterr().out
         assert "[patch-check]" in first and "unattenuated-continuum patch" in first
+        assert "the unattenuated diffuse continuum is NOT produced" in first
+        assert "use the attenuated diffuse continuum" in first
 
         # second task in the same worker: warning must NOT repeat
+        runner.run_cloudy_task({"sim_file": sim_file, "time": 0.12 * MYR_TO_SEC,
+                                "phase": "shell", "add_dig": False})
+        assert "[patch-check]" not in capsys.readouterr().out
+
+    def test_warns_once_on_stock_header(self, tmp_path, monkeypatch, capsys, sim_file):
+        monkeypatch.setattr(runner, "_PATCH_CHECK_LOGGED", False)
+        run_dir = tmp_path / "run"
+        run_dir.mkdir()
+        _install_fake_simmanager(monkeypatch, str(run_dir),
+                                 lambda ph, t: _write_outputs(str(run_dir), ph, t, diffcont="stock"))
+
+        runner.run_cloudy_task({"sim_file": sim_file, "time": TIME, "phase": "shell", "add_dig": False})
+        first = capsys.readouterr().out
+        assert "[patch-check]" in first and "unattenuated-continuum patch" in first
+        # the warning says plainly that the unattenuated continuum is NOT produced
+        # and that a stock Cloudy's .diffContUnatt holds the standard, attenuated one
+        assert "the unattenuated diffuse continuum is NOT produced" in first
+        assert ("A stock Cloudy writes .diffContUnatt with its standard, attenuated diffuse "
+                "continuum, so the noDust / variable-DTM SEDs use the attenuated one.") in first
         runner.run_cloudy_task({"sim_file": sim_file, "time": 0.12 * MYR_TO_SEC,
                                 "phase": "shell", "add_dig": False})
         assert "[patch-check]" not in capsys.readouterr().out
@@ -369,13 +403,13 @@ class TestResumeAccounting:
         assert {t["i"] for t in remaining} == {1}     # task 0 OK; task 1 still pending
 
     def test_resume_round_credited_by_content_not_index(self, tmp_path):
-        # The historic miscount: a resume round re-numbers its task file, so "OK at
+        # A resume round re-numbers its task file, so "OK at
         # index k" from that round points at a DIFFERENT task in the original file.
         # Round 1 (against the original 5-task file) finishes tasks 0,1,2 but is killed
         # before 3,4. The gate writes a resume file [3,4] (now indices 0,1). Round 2
         # records OK at resume-indices 0 and 1 -- which, matched by content key, must
         # credit original tasks 3 and 4, NOT 0 and 1. With index matching, 3 and 4 would
-        # be re-listed forever (the 4952-pending loop).
+        # be re-listed forever.
         tasks = [json.dumps({"i": i}) for i in range(5)]
         k3 = check_status.task_key(tasks[3])
         k4 = check_status.task_key(tasks[4])

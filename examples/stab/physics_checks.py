@@ -31,7 +31,7 @@ from toddlers.stab import config as cfg
 from toddlers.constants import M_SUN
 
 # publication style, consistent with the paper figures (serif, four-sided ticks)
-_STYLE = Path(__file__).resolve().parents[1] / "paper_figures" / "paper_style.mplstyle"
+_STYLE = Path(__file__).resolve().parent / "paper_style.mplstyle"
 if _STYLE.exists():
     plt.style.use(str(_STYLE))
 

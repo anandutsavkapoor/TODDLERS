@@ -24,7 +24,7 @@ from toddlers.track_simulation import load_output_file
 from toddlers.cloudy_timegrid_generator import TimeGridGenerator
 from toddlers.cloudy_output_handler import CloudyOutputHandler
 from toddlers.constants import *
-from toddlers.utils import f_dust_label, resolve_output_root
+from toddlers.utils import f_dust_label, output_root_of
 import argparse
 from .line_profiles import LineProfileGenerator
 from .config import INCLUDE_NEBULAR_CONTINUUM
@@ -72,18 +72,16 @@ class TODDLERSInterpolantGenerator:
         if not self.evolution_dir.exists():
             raise RuntimeError(f"Evolution directory not found: {self.evolution_dir}")
 
-        # Get root directory by finding evolution_output in path
-        parts = self.evolution_dir.parts
-        try:
-            evo_idx = parts.index("evolution_output")
-            default_root = Path(*parts[:evo_idx])
-            self.rel_path = Path(*parts[evo_idx+1:])
-        except ValueError:
+        # The Cloudy output sits next to the evolution_output/ this directory is under: the
+        # rule CloudySimulationManager writes by (utils.output_root_of).
+        root = output_root_of(str(self.evolution_dir))
+        if root is None:
             raise RuntimeError("Path must contain 'evolution_output' directory")
-
-        # Cloudy output base: honor $TODDLERS_OUTPUT_ROOT (so it can sit on scratch), else the
-        # parent of evolution_output. Must match where CloudySimulationManager WROTE the output.
-        self.root_dir = Path(resolve_output_root(str(default_root)))
+        self.root_dir = Path(root)
+        # relative to the evolution_output/ in the path as given (no symlink resolution, like
+        # output_root_of), so a symlinked directory below it keeps its place
+        self.rel_path = Path(os.path.relpath(os.path.abspath(str(self.evolution_dir)),
+                                             os.path.join(root, "evolution_output")))
         self.cloudy_dir = self.root_dir / "cloudy_output" / self.rel_path
         
         print("\nDirectory Setup:")

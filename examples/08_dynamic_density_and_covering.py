@@ -1,4 +1,4 @@
-"""Dynamic cloud density and variable covering fraction (needs feedback data).
+"""Dynamic cloud density and variable covering fraction (shipped feedback tables).
 
 Two v2 birth-cloud features, shown against the static/fully-covered baseline:
   - dynamic_cloud_density: escaping ionizing radiation expands the unswept cloud,
@@ -6,7 +6,7 @@ Two v2 birth-cloud features, shown against the static/fully-covered baseline:
   - add_cover_frac: after the cloud is swept, a covering fraction < 1 lets radiation
     and ram pressure leak through holes the 1D model cannot resolve directly.
 
-Requires: `python scripts/download_data.py`.
+No download needed: the feedback tables ship with the package.
 """
 import os
 

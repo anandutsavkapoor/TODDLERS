@@ -6,6 +6,7 @@ from .cloudy_grains_generator import CloudyGrainsGenerator
 from .cloudy_abundances_generator import CloudyAbundancesGenerator
 from .stellar_feedback import StellarFeedback
 from .utils import generate_spectral_table_filename
+from .cloudy_stellar_spectra_generator import cloudy_logZ_text
 
 
 def resolve_small_to_large_ratio(override=None):
@@ -79,19 +80,48 @@ class BaseCloudyInputGenerator:
         self.abundances_generator = CloudyAbundancesGenerator()
         
         # Initialize stellar feedback
-        self.stellar_feedback = StellarFeedback(
-            template=simulation_params['template'],
-            Z=simulation_params['Z'],
-            M_cl_init=simulation_params['M_cl_init'] * M_SUN,
-            eta_sf=simulation_params['eta_sf'],
-            t_list_collapse=t_list_collapse,
-            mode=simulation_params['cluster_formation_mode'],
-            formation_timescale=simulation_params.get('formation_timescale'),
-            imf=simulation_params['imf'],
-            star_type=simulation_params['star_type']
-        )
+        self.stochastic = None
+        if simulation_params.get('stochastic') is not None:
+            self.stellar_feedback = self._stochastic_feedback(simulation_params, t_list_collapse)
+        else:
+            self.stellar_feedback = StellarFeedback(
+                template=simulation_params['template'],
+                Z=simulation_params['Z'],
+                M_cl_init=simulation_params['M_cl_init'] * M_SUN,
+                eta_sf=simulation_params['eta_sf'],
+                t_list_collapse=t_list_collapse,
+                mode=simulation_params['cluster_formation_mode'],
+                formation_timescale=simulation_params.get('formation_timescale'),
+                imf=simulation_params['imf'],
+                star_type=simulation_params['star_type']
+            )
         
         self.initialize_parameters()
+
+    def _stochastic_feedback(self, simulation_params, t_list_collapse):
+        """StellarFeedback of a stochastic evolution run, rebuilt from the star lists saved
+        with it (each checked against a fresh draw from its seed). Snap mode only."""
+        from .pysb99.stochastic.population import StochasticSpec, populations_from_records
+        rec = simulation_params['stochastic']
+        self.stochastic = StochasticSpec.from_run_record(rec)
+        if self.stochastic.interpolation_mode != 'snap':
+            raise ValueError("The Cloudy stage needs a snap-mode stochastic run: no EEP spectra exist, "
+                             "so EEP luminosities would be paired with snapped spectral shapes.")
+        if rec.get('database_md5') and rec['database_md5'] != self.stochastic.database_md5():
+            raise ValueError(f"{self.stochastic.database_path} is not the single-star database the "
+                             f"evolution run used (md5 {rec['database_md5']}).")
+        pops = populations_from_records(rec['generations'], simulation_params.get('_dat_path'))
+        if len(pops) != len(t_list_collapse) + 1:
+            raise ValueError(f"{len(pops)} saved generations, {len(t_list_collapse) + 1} in the run")
+        # exact M_cl,init from the first generation (the path value is rounded to 0.01 dex)
+        eta = float(simulation_params['eta_sf'])
+        M_cl_init = pops[0].target_mass_msun / eta
+        return StellarFeedback(
+            template='pySB99', Z=simulation_params['Z'], M_cl_init=M_cl_init * M_SUN,
+            eta_sf=eta, t_list_collapse=t_list_collapse,
+            mode=simulation_params['cluster_formation_mode'],
+            formation_timescale=simulation_params.get('formation_timescale'),
+            imf=None, star_type='sin', stochastic=self.stochastic, populations=pops)
 
     def initialize_parameters(self):
         self.abund_set_name = 'GASS10'
@@ -189,9 +219,9 @@ class BaseCloudyInputGenerator:
                     age_yr = min_age_yr
 
                 # Add source options for this generation
-                source_filename = self.get_spectral_table_filename()
+                source_filename = self.get_spectral_table_filename(generation=gen)
                 source_options.append(
-                    f'table star "{source_filename}" age={age_yr:.2f} logZ={np.log10(self.Z)}'
+                    f'table star "{source_filename}" age={age_yr:.2f} logZ={cloudy_logZ_text(self.Z)}'
                 )
                 source_options.append(f'luminosity total={np.log10(L_bol * scaling)}')
                 
@@ -208,7 +238,14 @@ class BaseCloudyInputGenerator:
         else:
             return source_options
 
-    def get_spectral_table_filename(self):
+    def get_spectral_table_filename(self, generation=None):
+        if self.stochastic is not None:
+            # one star table per generation, built from that generation's star list
+            from .pysb99.stochastic.population import ensure_star_table
+            if generation is None:
+                raise ValueError("stochastic runs have one star table per generation; pass generation")
+            return ensure_star_table(self.stellar_feedback.populations[generation], self.stochastic,
+                                     paired_feedback_table=self.stellar_feedback.generation_tables[generation].feedback_table)
         # Dispatch with startswith for consistency with the rest of the codebase,
         # so template aliases like 'SB99_100' resolve correctly; raise on anything
         # genuinely unknown rather than failing later with an unbound variable.
@@ -220,13 +257,15 @@ class BaseCloudyInputGenerator:
             res_fac = 1
         else:
             raise ValueError(
-                f"Unknown stellar template '{self.template}'. "
-                "Expected one of 'SB99', 'BPASS', 'pySB99'."
+                f"No Cloudy spectral loader for the stellar template '{self.template}': its feedback "
+                f"table can drive the evolution, but the Cloudy stage needs star tables (spectra per "
+                f"age and Z), which exist for 'SB99', 'BPASS' and 'pySB99' only."
             )
         return generate_spectral_table_filename(
             self.template, self.imf, self.star_type, 
             formation_timescale=self.formation_time_yr,
-            wavelength_resolution_factor=res_fac
+            wavelength_resolution_factor=res_fac,
+            resample=STAR_TABLE_RESAMPLE
         )
 
     @abstractmethod
@@ -341,7 +380,9 @@ class BaseCloudyInputGenerator:
             save_heating (bool): Whether to save heating mechanisms. Defaults to True.
             save_cooling (bool): Whether to save cooling mechanisms. Defaults to True.
             save_opacities (bool): Whether to save optical depths. Defaults to False.
-            line_list_version (str): Version of line list to use ('v1' or 'v2'). Defaults to 'v2'.
+            line_list_version (str): Line list to use; only 'v2' (the default). The v1
+                list of the first TODDLERS build is legacy, kept for comparison only in
+                docs/legacy/, and cannot be selected.
             
         Returns:
             list: Cloudy save commands for various physical quantities and diagnostic information.
@@ -352,8 +393,11 @@ class BaseCloudyInputGenerator:
         if dissolved:
             return ['save last continuum ".cont" units micron']
         
-        if line_list_version not in ['v1', 'v2']:
-            raise ValueError("line_list_version must be either 'v1' or 'v2'")
+        if line_list_version != 'v2':
+            raise ValueError(
+                f"line_list_version must be 'v2' (got {line_list_version!r}). The v1 list "
+                "of the first TODDLERS build is legacy: not for use, kept for comparison "
+                "only in docs/legacy/ of the repository.")
                 
         # Essential commands that are always included
         commands = [

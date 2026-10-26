@@ -37,7 +37,7 @@ import sys
 from multiprocessing import Pool, cpu_count
 
 # Import from same package
-from .database import query_database, query_spectrum
+from .database import query_database, query_spectrum, get_supernova_table
 
 # =============================================================================
 # Time-Delayed Spectra Calculation (for Cloudy)
@@ -264,6 +264,54 @@ def compute_time_delayed_spectra(
 # Cloudy Table Generation
 # =============================================================================
 
+def _stochastic_table_key(masses, initial_ages, database_path, metallicities, rotation,
+                          time_grid_myr):
+    """Content key of a stochastic Cloudy table: everything the spectra depend on."""
+    import hashlib
+    from toddlers.cloudy_stellar_spectra_generator import _file_md5, STAR_TABLE_CODE_VERSION
+    arr_md5 = lambda a: hashlib.md5(np.ascontiguousarray(a, dtype=float).tobytes()).hexdigest()
+    return {'kind': 'pySB99_stochastic', 'table_code_version': STAR_TABLE_CODE_VERSION,
+            'masses_md5': arr_md5(masses), 'initial_ages_md5': arr_md5(initial_ages),
+            'n_stars': int(len(masses)), 'metallicities': list(metallicities),
+            'rotation': bool(rotation), 'time_grid_myr': [float(t) for t in time_grid_myr],
+            'database_md5': _file_md5(database_path)}
+
+
+def _stochastic_table_path(output_filename, output_dir=None):
+    """Destination of a stochastic table: output_dir if given, else CLOUDY_DATA_DIR if
+    available, else the cwd."""
+    if output_dir is None:
+        try:
+            from toddlers.constants import CLOUDY_DATA_DIR
+            output_dir = CLOUDY_DATA_DIR
+        except ImportError:
+            output_dir = os.getcwd()
+            warnings.warn(f"CLOUDY_DATA_DIR not available, using current directory: {output_dir}")
+    os.makedirs(output_dir, exist_ok=True)
+    return output_dir, os.path.join(output_dir, output_filename)
+
+
+def _reuse_stochastic_table(full_path, output_dir, key, time_grid_yr, Z_values, verbose):
+    """True if the table at full_path holds this request; an outdated one is moved aside."""
+    from toddlers.cloudy_stellar_spectra_generator import (star_table_is_current,
+                                                           move_star_table_aside)
+    if not os.path.exists(full_path):
+        return False
+    if star_table_is_current(full_path, key, time_grid_yr, Z_values):
+        if verbose:
+            print(f"* Cloudy table '{os.path.basename(full_path)}' is current. Reusing it.")
+        return True
+    move_star_table_aside(full_path, output_dir)
+    return False
+
+
+def _paired_md5(paired_feedback_files):
+    if not paired_feedback_files:
+        return None
+    from toddlers.cloudy_stellar_spectra_generator import files_md5
+    return files_md5(paired_feedback_files)
+
+
 def generate_cloudy_spectral_table(
         masses: np.ndarray,
         initial_ages: np.ndarray,
@@ -273,7 +321,10 @@ def generate_cloudy_spectral_table(
         time_grid_myr: Optional[np.ndarray] = None,
         rotation: bool = False,
         n_processes: Optional[int] = None,
-        verbose: bool = True) -> str:
+        verbose: bool = True,
+        paired_feedback_files: Optional[List[str]] = None,
+        output_dir: Optional[str] = None,
+        paired_feedback_content_md5: Optional[str] = None) -> str:
     """
     Generate Cloudy ASCII spectral table for stochastic population.
     
@@ -299,6 +350,16 @@ def generate_cloudy_spectral_table(
         Use rotating models
     verbose : bool
         Print progress
+    paired_feedback_files : list of str, optional
+        Files of the feedback table this spectral table pairs with; their md5 is recorded
+        in the sidecar as ``paired_feedback_md5`` (run-time generations record the table's
+        content md5 as ``paired_feedback_content_md5`` instead).
+    output_dir : str, optional
+        Directory to write the table to; default CLOUDY_DATA_DIR if available, else the
+        current directory.
+    paired_feedback_content_md5 : str, optional
+        Content md5 of the unified feedback table this star table pairs with (a run-time
+        generation table, FeedbackTable.content_md5); recorded in the sidecar.
         
     Returns
     -------
@@ -307,6 +368,12 @@ def generate_cloudy_spectral_table(
         
     Notes
     -----
+    The table is written by
+    :func:`toddlers.cloudy_stellar_spectra_generator.write_cloudy_star_table` (grid checks,
+    sidecar ``<table>.meta.json``). An existing table is reused only if its sidecar key
+    (population, metallicity, rotation, time grid, database md5) matches; otherwise it is
+    moved to ``stale_tables/``.
+
     The generated table format matches Cloudy's expectations:
     - Header with version, parameters
     - Age and metallicity grid
@@ -319,7 +386,9 @@ def generate_cloudy_spectral_table(
     Examples
     --------
     >>> # After sampling the population (m_upper is required)
-    >>> masses = sample_imf_discrete(1e6, 'database.h5', 'MW', m_upper=100.)
+    >>> from toddlers.pysb99.stochastic.population import IMFSpec, draw_stop_after, generation_rng
+    >>> masses = draw_stop_after(IMFSpec('kroupa', 0.1, 100.), 1e6, generation_rng(42, 0))
+    >>> masses = masses[masses >= 0.8]   # stars below the lowest track give no light
     >>> ages = sample_ages(len(masses), t_sf_myr=5.0)
     >>>
     >>> # Generate Cloudy table
@@ -345,6 +414,16 @@ def generate_cloudy_spectral_table(
               f"{time_grid_myr[0]:.3f} - {time_grid_myr[-1]:.1f} Myr")
         print()
     
+    # Get metallicity Z value
+    from .database import METALLICITY_MAPPING
+    Z_value = METALLICITY_MAPPING[metallicity]
+
+    output_dir, full_path = _stochastic_table_path(output_filename, output_dir)
+    key = _stochastic_table_key(masses, initial_ages, database_path, [metallicity], rotation,
+                                time_grid_myr)
+    if _reuse_stochastic_table(full_path, output_dir, key, time_grid_yr, [Z_value], verbose):
+        return full_path
+
     # Compute time-delayed spectra
     wavelengths, spectra = compute_time_delayed_spectra(
         masses=masses,
@@ -356,66 +435,20 @@ def generate_cloudy_spectral_table(
         n_processes=n_processes,
         verbose=verbose
     )
-    
-    # Get metallicity Z value
-    from .database import METALLICITY_MAPPING
-    Z_value = METALLICITY_MAPPING[metallicity]
-    
-    # Determine output directory
-    try:
-        from toddlers.constants import CLOUDY_DATA_DIR
-        output_dir = CLOUDY_DATA_DIR
-    except ImportError:
-        output_dir = os.getcwd()
-        warnings.warn(f"CLOUDY_DATA_DIR not available, using current directory: {output_dir}")
-    
-    os.makedirs(output_dir, exist_ok=True)
-    full_path = os.path.join(output_dir, output_filename)
-    
+
     if verbose:
         print("\nWriting Cloudy ASCII table...")
-    
-    # Write Cloudy ASCII table directly (without using SpectralTableGenerator class)
-    # Format matches Cloudy's expected structure
-    with open(full_path, 'w') as f:
-        # Header
-        f.write("20060612\n")  # Version identifier
-        f.write("2\n2\n")  # 2 axes, 2 parameters per axis
-        f.write("Age\nlog(Z)\n")  # Axis names
-        
-        # Number of (age, Z) combinations and wavelengths
-        n_ages = len(time_grid_yr)
-        n_Z = 1  # Single metallicity for stochastic
-        f.write(f"{n_ages * n_Z}\n")
-        f.write(f"{len(wavelengths)}\n")
-        
-        # Column info
-        f.write("lambda\n1.00000000e+00\n")
-        f.write("F_lambda\n1.00000000e+00\n")
-        
-        # Write age-metallicity combinations
-        for t in time_grid_yr:
-            f.write(f"{t:.6e} {np.log10(Z_value):.6f}\n")
-        
-        # Write wavelengths (5 per line)
-        for i, w in enumerate(wavelengths):
-            f.write(f"{w:.6e}")
-            if (i + 1) % 5 == 0 or i == len(wavelengths) - 1:
-                f.write("\n")
-            else:
-                f.write("  ")
-        
-        # Write spectra (5 flux values per line)
-        # spectra shape: (n_times, n_wavelengths)
-        for i_time in range(n_ages):
-            spectrum = spectra[i_time, :]
-            for i, flux in enumerate(spectrum):
-                f.write(f"{flux:.6e}")
-                if (i + 1) % 5 == 0 or i == len(spectrum) - 1:
-                    f.write("\n")
-                else:
-                    f.write("  ")
-    
+
+    # One metallicity: spectra (n_times, n_wavelengths) -> (1, n_times, n_wavelengths)
+    from toddlers.cloudy_stellar_spectra_generator import write_cloudy_star_table
+    side = {'origin': 'generated', 'key': key,
+            'paired_feedback_md5': _paired_md5(paired_feedback_files),
+            'units': {'lambda': 'Angstrom', 'F_lambda': '1e20 erg s-1 Angstrom-1',
+                      'F_lambda_note': 'sum over the stars of the population (not normalized)'}}
+    if paired_feedback_content_md5 is not None:
+        side['paired_feedback_content_md5'] = paired_feedback_content_md5
+    write_cloudy_star_table(full_path, time_grid_yr, [Z_value], wavelengths, [spectra], sidecar=side)
+
     if verbose:
         print(f"* Cloudy table written to: {full_path}")
         print(f"  Ages: {len(time_grid_yr)} points, Wavelengths: {len(wavelengths)} points")
@@ -434,13 +467,13 @@ def generate_cloudy_spectral_table_2d(
         time_grid_myr: Optional[np.ndarray] = None,
         rotation: bool = False,
         n_processes: Optional[int] = None,
-        verbose: bool = True) -> str:
+        verbose: bool = True,
+        paired_feedback_files: Optional[List[str]] = None) -> str:
     """
     Generate 2D Cloudy ASCII spectral table for stochastic populations.
     
     Creates a Cloudy-compatible spectral table with multiple metallicities using
-    the SAME IMF realization (masses, ages) for all metallicities. This matches
-    the approach in build_stochastic_interpolants_2d().
+    the SAME IMF realization (masses, ages) for all metallicities.
     
     Parameters
     ----------
@@ -463,6 +496,9 @@ def generate_cloudy_spectral_table_2d(
         Number of parallel processes
     verbose : bool
         Print progress
+    paired_feedback_files : list of str, optional
+        The paired feedback table files; their md5 goes into the sidecar
+        (``paired_feedback_md5``).
         
     Returns
     -------
@@ -471,6 +507,9 @@ def generate_cloudy_spectral_table_2d(
         
     Notes
     -----
+    Written by :func:`toddlers.cloudy_stellar_spectra_generator.write_cloudy_star_table`,
+    with the same sidecar and reuse rule as generate_cloudy_spectral_table.
+
     The generated table is a proper 2D Cloudy table with:
     - Multiple (age, Z) combinations
     - Same wavelength grid for all
@@ -481,10 +520,12 @@ def generate_cloudy_spectral_table_2d(
     
     Examples
     --------
-    >>> from stochastic.sampling import sample_imf_discrete, sample_ages
+    >>> from toddlers.pysb99.stochastic.population import IMFSpec, draw_stop_after, generation_rng
+    >>> from toddlers.pysb99.stochastic.sampling import sample_ages
     >>>
-    >>> # Sample population ONCE
-    >>> masses = sample_imf_discrete(1e6, 'database.h5', 'MW', m_upper=120.0, seed=42)
+    >>> # Sample population ONCE (full IMF range; keep the stars that have tracks)
+    >>> masses = draw_stop_after(IMFSpec('kroupa', 0.1, 100.), 1e6, generation_rng(42, 0))
+    >>> masses = masses[masses >= 0.8]
     >>> ages = sample_ages(len(masses), t_sf_myr=5.0, seed=42)
     >>>
     >>> # Generate 2D Cloudy table
@@ -520,6 +561,12 @@ def generate_cloudy_spectral_table_2d(
               f"{time_grid_myr[0]:.3f} - {time_grid_myr[-1]:.1f} Myr")
         print("="*70)
     
+    output_dir, full_path = _stochastic_table_path(output_filename)
+    key = _stochastic_table_key(masses, initial_ages, database_path, metallicities, rotation,
+                                time_grid_myr)
+    if _reuse_stochastic_table(full_path, output_dir, key, time_grid_yr, Z_values, verbose):
+        return full_path
+
     # Compute spectra for each metallicity
     # All use the SAME masses and ages
     spectra_dict = {}
@@ -550,68 +597,22 @@ def generate_cloudy_spectral_table_2d(
         
         spectra_dict[met] = spectra
     
-    # Determine output directory
-    try:
-        from toddlers.constants import CLOUDY_DATA_DIR
-        output_dir = CLOUDY_DATA_DIR
-    except ImportError:
-        output_dir = os.getcwd()
-        warnings.warn(f"CLOUDY_DATA_DIR not available, using current directory: {output_dir}")
-    
-    os.makedirs(output_dir, exist_ok=True)
-    full_path = os.path.join(output_dir, output_filename)
-    
     if verbose:
         print("\n" + "="*70)
         print("Writing 2D Cloudy ASCII table...")
         print("="*70)
-    
-    # Write Cloudy ASCII table
+
     n_ages = len(time_grid_yr)
     n_Z = len(metallicities)
     n_wavelengths = len(wavelength_grid)
-    
-    with open(full_path, 'w') as f:
-        # Header
-        f.write("20060612\n")  # Version identifier
-        f.write("2\n2\n")  # 2 axes, 2 parameters per axis
-        f.write("Age\nlog(Z)\n")  # Axis names
-        
-        # Number of (age, Z) combinations and wavelengths
-        f.write(f"{n_ages * n_Z}\n")
-        f.write(f"{n_wavelengths}\n")
-        
-        # Column info
-        f.write("lambda\n1.00000000e+00\n")
-        f.write("F_lambda\n1.00000000e+00\n")
-        
-        # Write age-metallicity combinations
-        # Format: one line per (age, Z) pair
-        for Z_val in Z_values:
-            for t in time_grid_yr:
-                f.write(f"{t:.6e} {np.log10(Z_val):.6f}\n")
-        
-        # Write wavelengths (5 per line)
-        for i, w in enumerate(wavelength_grid):
-            f.write(f"{w:.6e}")
-            if (i + 1) % 5 == 0 or i == n_wavelengths - 1:
-                f.write("\n")
-            else:
-                f.write("  ")
-        
-        # Write spectra (5 flux values per line)
-        # Order: for each Z, write all time points
-        for met in metallicities:
-            spectra = spectra_dict[met]
-            for i_time in range(n_ages):
-                spectrum = spectra[i_time, :]
-                for i, flux in enumerate(spectrum):
-                    f.write(f"{flux:.6e}")
-                    if (i + 1) % 5 == 0 or i == len(spectrum) - 1:
-                        f.write("\n")
-                    else:
-                        f.write("  ")
-    
+
+    # Order: for each Z, all time points
+    from toddlers.cloudy_stellar_spectra_generator import write_cloudy_star_table
+    write_cloudy_star_table(full_path, time_grid_yr, Z_values, wavelength_grid,
+                            [spectra_dict[met] for met in metallicities],
+                            sidecar={'origin': 'generated', 'key': key,
+                                     'paired_feedback_md5': _paired_md5(paired_feedback_files)})
+
     if verbose:
         print(f"* Cloudy table written to: {full_path}")
         print(f"  Ages: {n_ages} points")
@@ -711,6 +712,34 @@ def _process_star_chunk(args):
     return chunk_results
 
 
+def supernova_feedback(masses, initial_ages, time_grid_myr, database_path, metallicity) -> Dict:
+    """SN power and momentum per time bin for a stochastic population.
+
+    Each star with sn_mass_min <= m <= sn_mass_max explodes once, at its formation
+    time plus its death time; t_death and M_final are interpolated between the
+    database masses by monotone PCHIP in log-log (exact at database masses), the same
+    rule as the deterministic pySB99 SN term, in both snap and eep modes. Bins are centred on time_grid_myr (midpoint edges); events outside the grid
+    are dropped. Returns per-bin 'sn_number', 'sn_power' [erg/s] and 'sn_momentum'
+    [dyn], plus 'n_exploding' and 'n_sn_in_grid'.
+    """
+    from ..pysb99_core import StellarPopulationSynthesis, YEAR_S, MSUN_G, in_sn_window, loglog_pchip
+    tab = get_supernova_table(database_path, metallicity)
+    m = np.asarray(masses, float)
+    explodes = in_sn_window(m, tab['sn_mass_min'], tab['sn_mass_max'])
+    t_d = loglog_pchip(tab['mass'], tab['t_death_myr'])(m)
+    m_ej = np.maximum(loglog_pchip(tab['mass'], tab['M_final_msun'])(m) - tab['sn_remnant_mass'], 0.0)
+    p_sn = np.sqrt(2.0 * tab['sn_energy_erg'] * m_ej * MSUN_G)
+    t_sn = np.asarray(initial_ages, float) + t_d
+    edges = StellarPopulationSynthesis.centred_bin_edges(time_grid_myr)
+    dt_s = np.diff(edges) * 1e6 * YEAR_S
+    w = explodes.astype(float)
+    n_bin = StellarPopulationSynthesis.deposit_events(edges, t_sn[explodes], t_sn[explodes], w[explodes])
+    p_bin = StellarPopulationSynthesis.deposit_events(edges, t_sn[explodes], t_sn[explodes], p_sn[explodes])
+    return {'sn_number': n_bin, 'sn_power': n_bin * tab['sn_energy_erg'] / dt_s,
+            'sn_momentum': p_bin / dt_s, 'n_exploding': int(explodes.sum()),
+            'n_sn_in_grid': float(n_bin.sum())}
+
+
 def compute_time_delayed_feedback(
         masses: np.ndarray,
         initial_ages: np.ndarray,
@@ -720,7 +749,8 @@ def compute_time_delayed_feedback(
         rotation: bool = False,
         n_processes: Optional[int] = None,
         verbose: bool = True,
-        interpolation_mode: str = 'snap') -> Dict[str, np.ndarray]:
+        interpolation_mode: str = 'snap',
+        include_supernovae: bool = True) -> Dict[str, np.ndarray]:
     """
     Compute time-delayed feedback for stochastic population.
 
@@ -862,6 +892,19 @@ def compute_time_delayed_feedback(
         print("  Completed all stars")
         print()
     
+    # Core-collapse supernovae: one instantaneous event per exploding star, at
+    # tau_i + t_death(m_i), deposited into the time bin (centred on time_grid_myr) that
+    # holds it, as E_SN / dt and sqrt(2 E_SN M_ej) / dt. t_death and M_final are PCHIP in
+    # log-log between the database masses, in both interpolation modes.
+    sn = supernova_feedback(masses, initial_ages, time_grid_myr, database_path, metallicity) \
+        if include_supernovae else None
+    if sn is not None:
+        wind_power_linear += sn['sn_power']
+        wind_momentum_linear += sn['sn_momentum']
+        if verbose:
+            print(f"  Supernovae: {sn['n_sn_in_grid']:.0f} in the time grid "
+                  f"({sn['n_exploding']} exploding stars)")
+
     # Calculate total stellar mass
     total_mass = np.sum(masses)
     
@@ -884,9 +927,13 @@ def compute_time_delayed_feedback(
     # ========================================================================
     # TODDLERS expects these additional quantities for full compatibility
     
-    # Total ionizing photon rate (HI + HeI + HeII)
+    # Sum of the three (nested) band photon rates: diagnostic only, see below
     Q_ion_linear = Q_HI_linear + Q_HeI_linear + Q_HeII_linear
-    feedback_total['Q_ion'] = np.log10(Q_ion_linear + 1e-99)
+    # The pySB99 bands are nested (Q_HI already counts every photon below 912 A), so the
+    # hydrogen-ionizing rate StellarFeedback reads is Q_HI, as in the deterministic tables
+    # (generate_pysb99_interpolants.py f_Q_ion). Q_ion_linear (the band sum) is kept only for
+    # the mean-energy diagnostic below, which uses the same sums as the deterministic tables.
+    feedback_total['Q_ion'] = np.log10(Q_HI_linear + 1e-99)
     
     # Total ionizing luminosity (sum of all ionizing channels)
     # Note: L_ion_HI, L_ion_HeI, L_ion_HeII are TRUE values from pySB99 spectrum integration
@@ -926,6 +973,12 @@ def compute_time_delayed_feedback(
                      'L_ion_HI', 'L_ion_HeI', 'L_ion_HeII']
     for key in log_quantities:
         feedback_total[key] -= log_normalization
+
+    # Supernova diagnostics (NOT normalized: totals for this population, linear units)
+    if sn is not None:
+        feedback_total['sn_power_linear'] = sn['sn_power']        # erg/s
+        feedback_total['sn_momentum_linear'] = sn['sn_momentum']  # dyn
+        feedback_total['sn_number'] = sn['sn_number']
     
     if verbose:
         print("="*70)
@@ -1319,549 +1372,22 @@ def compute_imf_sampling_metrics(
 
 
 # =============================================================================
-# Complete Pipeline (Real 2D Interpolants)
+# Pre-drawn stochastic tables (removed)
 # =============================================================================
 
-def build_stochastic_interpolants_2d(
-        masses: np.ndarray,
-        initial_ages: np.ndarray,
-        database_path: str,
-        metallicities: Optional[List[str]] = None,
-        time_grid_myr: Optional[np.ndarray] = None,
-        rotation: bool = False,
-        compute_derivatives: bool = True,
-        imf_name: str = 'kroupa',
-        n_processes: Optional[int] = None,
-        verbose: bool = True,
-        interpolation_mode: str = 'snap') -> Dict:
-    """
-    Build real 2D interpolants (time, metallicity) from stochastic populations.
-    
-    This is the recommended entry point for TODDLERS compatibility. It creates
-    interpolants with the same structure as generate_pysb99_interpolants.py by:
-    1. Using the SAME IMF realization (masses, ages) for ALL metallicities
-    2. Computing feedback for each metallicity using the single-star database
-    3. Building 2D arrays and creating Interp2DLinear (RGI-backed) objects
-    
-    Parameters
-    ----------
-    masses : np.ndarray
-        Stellar masses [Msun] - same for all metallicities
-    initial_ages : np.ndarray
-        Initial stellar ages [Myr] - same for all metallicities
-    database_path : str
-        Path to HDF5 single-star database
-    metallicities : list of str, optional
-        Metallicity identifiers (e.g., ['SMC', 'LMC', 'MW'])
-        If None, uses ['SMC', 'LMC', 'MW', 'MWC']
-    time_grid_myr : np.ndarray, optional
-        Time grid [Myr]. If None, uses 0-30 Myr with 0.1 Myr spacing
-    rotation : bool
-        Use rotating stellar models
-    compute_derivatives : bool
-        Compute time derivatives (dL/dt, dF/dt) for TODDLERS
-    imf_name : str
-        IMF name for metadata ('kroupa', 'salpeter', 'top_heavy', etc.)
-        Used for computing IMF sampling quality metrics
-    n_processes : int, optional
-        Number of parallel processes. If None, uses all CPU cores.
-    verbose : bool
-        Print progress
-        
-    Returns
-    -------
-    dict
-        Real 2D interpolants compatible with TODDLERS:
-        - 'f_wind_power': function(t, Z) -> log10(erg/s per 10^6 Msun)
-        - 'f_wind_momentum': function(t, Z) -> log10(dyne per 10^6 Msun)
-        - 'f_L_bol': function(t, Z) -> log10(erg/s per 10^6 Msun)
-        - 'f_Q_ion': function(t, Z) -> log10(photons/s per 10^6 Msun)
-        - 'f_Q_HI', 'f_Q_HeI', 'f_Q_HeII': ionizing photon rates
-        - 'f_L_LyW': Lyman-Werner luminosity
-        - 'f_QratHe1H', 'f_QratHe2H': spectral hardness ratios
-        - 'f_mean_ion_energy': mean ionizing photon energy
-        - 'f_wind_power_rate': (if derivatives) dL/dt [LINEAR]
-        - 'f_wind_momentum_rate': (if derivatives) dF/dt [LINEAR]
-        - '_metadata': population and interpolant metadata
-        
-    Examples
-    --------
-    >>> from stochastic.sampling import sample_imf_discrete, sample_ages
-    >>>
-    >>> # Sample population ONCE
-    >>> masses = sample_imf_discrete(1e6, 'database.h5', 'MW', m_upper=120.0, seed=42)
-    >>> ages = sample_ages(len(masses), t_sf_myr=5.0, seed=42)
-    >>>
-    >>> # Build 2D interpolants for multiple metallicities
-    >>> interpolants = build_stochastic_interpolants_2d(
-    ...     masses, ages, 'database.h5',
-    ...     metallicities=['SMC', 'LMC', 'MW'],
-    ...     imf_name='kroupa'
-    ... )
-    >>> 
-    >>> # Use in TODDLERS
-    >>> L_wind = 10**interpolants['f_wind_power'](5.0, 0.014)  # t=5 Myr, Z=MW
-    >>> 
-    >>> # Access metadata
-    >>> meta = interpolants['_metadata']
-    >>> print(f"N stars: {meta['n_stars']}")
-    >>> print(f"Mass range: {meta['mass_statistics']['min_mass_msun']:.2f} - "
-    ...       f"{meta['mass_statistics']['max_mass_msun']:.2f} Msun")
-    >>> print(f"High-mass stars (>20 Msun): "
-    ...       f"{meta['imf_sampling_quality']['high_mass_counts']['above_20msun']}")
-    >>> print(f"K-S test p-value: {meta['imf_sampling_quality']['ks_pvalue']:.3f}")
-    
-    Notes
-    -----
-    The key difference from build_stochastic_interpolants():
-    - Old: Creates 1D interpolants + wrapper for single metallicity
-    - New: Creates real 2D interpolants for multiple metallicities
-    - New approach matches deterministic generate_pysb99_interpolants.py exactly
-    """
-    from .database import METALLICITY_MAPPING
-    
-    # Default metallicities
-    if metallicities is None:
-        metallicities = ['SMC', 'LMC', 'MW', 'MWC']
-    
-    # Get numeric Z values
-    Z_values = np.array([METALLICITY_MAPPING[m] for m in metallicities])
-    
-    # Default time grid
-    if time_grid_myr is None:
-        time_grid_myr = np.arange(0.0, 30.1, 0.1)
-    
-    if verbose:
-        print("="*70)
-        print("BUILDING 2D STOCHASTIC INTERPOLANTS")
-        print("="*70)
-        print(f"Population: {len(masses)} stars, total mass = {np.sum(masses):.2e} Msun")
-        print(f"Metallicities: {metallicities}")
-        print(f"Z values: {Z_values}")
-        print(f"Time grid: {len(time_grid_myr)} points from {time_grid_myr[0]:.2f} to {time_grid_myr[-1]:.2f} Myr")
-        print("="*70)
-    
-    # Loop over metallicities and compute feedback
-    feedback_dict = {}
-    
-    for i, (met, Z_val) in enumerate(zip(metallicities, Z_values)):
-        if verbose:
-            print(f"\nProcessing metallicity {i+1}/{len(metallicities)}: {met} (Z={Z_val:.4f})")
-        
-        # Compute time-delayed feedback for this metallicity
-        # Uses SAME masses and ages as all other metallicities
-        feedback_total = compute_time_delayed_feedback(
-            masses=masses,
-            initial_ages=initial_ages,
-            time_grid_myr=time_grid_myr,
-            database_path=database_path,
-            metallicity=met,
-            rotation=rotation,
-            n_processes=n_processes,
-            verbose=verbose,
-            interpolation_mode=interpolation_mode
-        )
-        
-        feedback_dict[met] = feedback_total
-    
-    if verbose:
-        print("\n" + "="*70)
-        print("Creating 2D interpolation functions...")
-        print("="*70)
-    
-    # Build 2D interpolants
-    interpolants = create_interpolants_2d(
-        time_grid_myr=time_grid_myr,
-        Z_values=Z_values,
-        feedback_dict=feedback_dict
-    )
-    
-    # Add metadata
-    total_mass = np.sum(masses)
-    
-    # Compute IMF sampling quality metrics
-    if verbose:
-        print("\nComputing IMF sampling quality metrics...")
-    
-    sampling_metrics = compute_imf_sampling_metrics(
-        masses=masses,
-        imf_name=imf_name,
-        n_mass_bins=30
-    )
-    
-    # Compute mass statistics
-    mass_stats = {
-        'min_mass_msun': float(np.min(masses)),
-        'max_mass_msun': float(np.max(masses)),
-        'median_mass_msun': float(np.median(masses)),
-        'mean_mass_msun': float(np.mean(masses)),
-        'percentiles': {
-            'p10': float(np.percentile(masses, 10)),
-            'p25': float(np.percentile(masses, 25)),
-            'p75': float(np.percentile(masses, 75)),
-            'p90': float(np.percentile(masses, 90)),
-            'p95': float(np.percentile(masses, 95)),
-            'p99': float(np.percentile(masses, 99))
-        }
-    }
-    
-    # Compute age statistics
-    age_stats = {
-        'min_age_myr': float(np.min(initial_ages)),
-        'max_age_myr': float(np.max(initial_ages)),
-        'median_age_myr': float(np.median(initial_ages)),
-        'mean_age_myr': float(np.mean(initial_ages)),
-        'std_age_myr': float(np.std(initial_ages)),
-        'distribution_mode': (
-            'burst' if np.max(initial_ages) < 0.01 else
-            'constant_sfr' if np.std(initial_ages) > 0.1 * np.mean(initial_ages) else
-            'mixed'
-        )
-    }
-    
-    interpolants['_metadata'] = {
-        # Population basics
-        'n_stars': len(masses),
-        'total_mass_msun': float(total_mass),
-        'imf_name': imf_name,
-        
-        # Normalization
-        'normalization': '10^6 Msun',
-        'log_normalization': float(np.log10(total_mass) - 6.0),
-        
-        # Metallicity grid
-        'metallicities': metallicities,
-        'Z_values': Z_values.tolist(),
-        'rotation': rotation,
-        
-        # Time grid
-        'time_range_myr': [float(time_grid_myr[0]), float(time_grid_myr[-1])],
-        'time_grid_myr': time_grid_myr.tolist(),
-        'n_time_points': len(time_grid_myr),
-        
-        # Mass distribution
-        'mass_statistics': mass_stats,
-        
-        # Age distribution  
-        'age_statistics': age_stats,
-        
-        # IMF sampling quality
-        'imf_sampling_quality': sampling_metrics,
-        
-        # Interpolant type
-        'stochastic': True,
-        'interpolant_type': '2D_real',
-        'scipy_interpolant_kind': 'Interp2DLinear_RGI'
-    }
-    
-    # Print summary if verbose
-    if verbose:
-        print("\nPopulation Summary:")
-        print(f"  N stars: {len(masses)}")
-        print(f"  Mass range: {mass_stats['min_mass_msun']:.2f} - {mass_stats['max_mass_msun']:.2f} Msun")
-        print(f"  High-mass stars (>20 Msun): {sampling_metrics['high_mass_counts']['above_20msun']}")
-        print(f"  IMF sampling: {sampling_metrics['n_per_decade']:.1f} stars/decade")
-        if sampling_metrics['ks_pvalue'] is not None:
-            print(f"  K-S test: p={sampling_metrics['ks_pvalue']:.3f} ({sampling_metrics['ks_interpretation']})")
-        print(f"  Age mode: {age_stats['distribution_mode']}")
-        print(f"  Star formation timescale: {age_stats['max_age_myr']:.2f} Myr")
-    
-    
-    # Compute time derivatives if requested
-    if compute_derivatives:
-        interpolants = compute_time_derivatives_2d(
-            time_grid_myr=time_grid_myr,
-            Z_values=Z_values,
-            interpolants=interpolants,
-            oversample_factor=10,
-            verbose=verbose
-        )
-    
-    if verbose:
-        print(f"\nCreated {len([k for k in interpolants.keys() if not k.startswith('_')])} interpolation functions")
-        print("="*70)
-        print("2D INTERPOLANTS COMPLETE")
-        print("="*70)
-    
-    return interpolants
+_PRE_DRAWN_REMOVED = (
+    "{name} was removed: it built a stochastic feedback table from one pre-drawn star list, "
+    "which Evolution does not read. Stochastic populations are drawn at run time, one "
+    "independent draw per star-forming generation: Evolution(template='pySB99', imf=None, "
+    "stochastic=StochasticSpec(IMFSpec(name, m_low, m_up), base_seed=...)) "
+    "(toddlers.pysb99.stochastic.population).")
 
 
-# =============================================================================
-# Save Interpolants (TODDLERS-Compatible Format)
-# =============================================================================
-
-def save_stochastic_interpolants(
-        interpolants: Dict,
-        output_dir: str,
-        imf_name: str,
-        rotation: bool = False,
-        overwrite: bool = True):
-    """
-    Save stochastic interpolants in TODDLERS-compatible format.
-    
-    This matches the format from generate_pysb99_interpolants.py:
-    - Main file: LIST of 7 interpolants [L_mech, F_ram, L_bolo, L_ion, Q_ion, F_ram_rate, L_mech_rate]
-    - LyW file: Single interpolant for Lyman-Werner luminosity
-    - Mean energy file: Single interpolant for mean ionizing photon energy
-    - Hardness file: LIST of 2 interpolants [QratHe1H, QratHe2H]
-    
-    Parameters
-    ----------
-    interpolants : dict
-        Dictionary from build_stochastic_interpolants()
-    output_dir : str
-        Directory to save files
-    imf_name : str
-        IMF identifier for filename
-    rotation : bool
-        Whether rotation was included (for filename)
-    overwrite : bool
-        Whether to overwrite existing files
-        
-    Returns
-    -------
-    dict
-        Dictionary mapping file types to filepaths
-        
-    Notes
-    -----
-    This format is REQUIRED for TODDLERS. The main interpolant file must be
-    a LIST in the specific order expected by stellar_feedback.py:
-    [L_mech, F_ram, L_bolo, L_ion, Q_ion, F_ram_rate, L_mech_rate]
-    """
-    import pickle
-    
-    os.makedirs(output_dir, exist_ok=True)
-    
-    # Generate filenames
-    rotation_suffix = '_rot' if rotation else ''
-    filename_main = f"pySB99interpolation_{imf_name}{rotation_suffix}.obj"
-    filename_lw = f"pySB99interpolation_{imf_name}{rotation_suffix}_LumLymanWerner.obj"
-    filename_mean_energy = f"pySB99interpolation_{imf_name}{rotation_suffix}_mean_ionizing_photon_energy.obj"
-    filename_hardness = f"pySB99interpolation_{imf_name}{rotation_suffix}_hardness.obj"
-    
-    filepath_main = os.path.join(output_dir, filename_main)
-    filepath_lw = os.path.join(output_dir, filename_lw)
-    filepath_mean_energy = os.path.join(output_dir, filename_mean_energy)
-    filepath_hardness = os.path.join(output_dir, filename_hardness)
-    
-    # Check for existing files
-    if not overwrite:
-        for filepath in [filepath_main, filepath_lw, filepath_mean_energy, filepath_hardness]:
-            if os.path.exists(filepath):
-                raise FileExistsError(
-                    f"File {filepath} already exists. Set overwrite=True to replace."
-                )
-    
-    # ========================================================================
-    # MAIN INTERPOLANTS FILE
-    # ========================================================================
-    # CRITICAL: Must be a LIST in this exact order for TODDLERS compatibility
-    # Format matches stellar_feedback.py expectations:
-    # [L_mech, F_ram, L_bolo, L_ion, Q_ion, F_ram_rate, L_mech_rate]
-    #
-    # where:
-    # - First 5 are in log10 space (erg/s, dyne, photons/s per 10^6 Msun)
-    # - Last 2 are derivatives in LINEAR space (erg/s/Myr, dyne/Myr per 10^6 Msun)
-    
-    main_interpolants = [
-        interpolants['f_wind_power'],           # [0] L_mech (log space)
-        interpolants['f_wind_momentum'],        # [1] F_ram (log space)
-        interpolants['f_L_bol'],                # [2] L_bolo (log space)
-        interpolants['f_L_ion'],                # [3] L_ion (log space)
-        interpolants['f_Q_ion'],                # [4] Q_ion (log space)
-        interpolants['f_wind_momentum_rate'],   # [5] F_ram_rate (linear space: dyne/Myr)
-        interpolants['f_wind_power_rate'],      # [6] L_mech_rate (linear space: erg/s/Myr)
-    ]
-    
-    with open(filepath_main, 'wb') as f:
-        pickle.dump(main_interpolants, f)
-    print(f" Saved main interpolants to {filename_main}")
-    
-    # ========================================================================
-    # LYMAN-WERNER INTERPOLANT FILE
-    # ========================================================================
-    with open(filepath_lw, 'wb') as f:
-        pickle.dump(interpolants['f_L_LyW'], f)
-    print(f" Saved Lyman-Werner interpolant to {filename_lw}")
-    
-    # ========================================================================
-    # MEAN IONIZING PHOTON ENERGY FILE
-    # ========================================================================
-    with open(filepath_mean_energy, 'wb') as f:
-        pickle.dump(interpolants['f_mean_ion_energy'], f)
-    print(f" Saved mean ionizing photon energy to {filename_mean_energy}")
-    
-    # ========================================================================
-    # HARDNESS RATIOS FILE
-    # ========================================================================
-    # Format: [f_QratHe1H, f_QratHe2H]
-    hardness_interpolants = [
-        interpolants['f_QratHe1H'],  # HeI/HI ratio
-        interpolants['f_QratHe2H'],  # HeII/HI ratio
-    ]
-    
-    with open(filepath_hardness, 'wb') as f:
-        pickle.dump(hardness_interpolants, f)
-    print(f" Saved hardness ratios to {filename_hardness}")
-    
-    print("\n All interpolants saved in TODDLERS-compatible format!")
-    
-    return {
-        'main': filepath_main,
-        'lyman_werner': filepath_lw,
-        'mean_energy': filepath_mean_energy,
-        'hardness': filepath_hardness
-    }
+def build_stochastic_interpolants_2d(*args, **kwargs):
+    """Removed: see _PRE_DRAWN_REMOVED. Use StochasticSpec in Evolution."""
+    raise RuntimeError(_PRE_DRAWN_REMOVED.format(name='build_stochastic_interpolants_2d'))
 
 
-# =============================================================================
-# Deterministic Limit Test
-# =============================================================================
-
-def test_deterministic_limit(
-        database_path: str,
-        metallicities: List[str] = None,
-        target_mass: float = 1e6,
-        time_grid_myr: Optional[np.ndarray] = None,
-        tolerance: float = 0.05,
-        verbose: bool = True) -> Dict:
-    """
-    Test that stochastic -> deterministic limit as N_stars -> infinity.
-    
-    For 10^6 Msun with all tau_i = 0 (burst), the stochastic interpolant
-    should match the standard pySB99 interpolant within ~5%.
-    
-    Parameters
-    ----------
-    database_path : str
-        Path to HDF5 database
-    metallicities : list of str, optional
-        Metallicity identifiers to test. If None, uses ['MW']
-    target_mass : float
-        Total mass [Msun]. Should be large (>10^6) for good convergence
-    time_grid_myr : np.ndarray, optional
-        Time grid for comparison
-    tolerance : float
-        Maximum fractional difference allowed
-    verbose : bool
-        Print results
-        
-    Returns
-    -------
-    dict
-        Test results with fractional differences for each quantity
-        
-    Notes
-    -----
-    This test verifies correctness of the time-delayed feedback approach.
-    Uses the new 2D interpolant workflow.
-    """
-    if metallicities is None:
-        metallicities = ['MW']
-    
-    if time_grid_myr is None:
-        time_grid_myr = np.arange(0.0, 30.1, 0.1)
-    
-    if verbose:
-        print("="*70)
-        print("DETERMINISTIC LIMIT TEST (2D)")
-        print("="*70)
-        print(f"Testing {target_mass:.0e} Msun burst")
-        print(f"Metallicities: {metallicities}")
-        print()
-    
-    # Sample population (large N for good convergence)
-    from stochastic.sampling import sample_imf_discrete, sample_ages
-
-    masses = sample_imf_discrete(
-        total_mass=target_mass,
-        database_path=database_path,
-        metallicity=metallicities[0],
-        m_upper=120.0,
-        imf_name='kroupa',
-        seed=42
-    )
-    
-    ages = sample_ages(
-        n_stars=len(masses),
-        t_sf_myr=0.0,  # Burst
-        mode='uniform',
-        seed=42
-    )
-    
-    if verbose:
-        print(f"Sampled {len(masses)} stars")
-    
-    # Build 2D stochastic interpolants
-    stoch_interps = build_stochastic_interpolants_2d(
-        masses, ages, database_path, 
-        metallicities=metallicities,
-        time_grid_myr=time_grid_myr,
-        compute_derivatives=False,
-        verbose=False
-    )
-    
-    # Load standard pySB99 interpolant for comparison
-    # (This would require generate_pysb99_interpolants to have been run)
-    # For now, we just check internal consistency
-    
-    if verbose:
-        print("\n2D stochastic interpolants created successfully")
-        print("(Full comparison with pySB99 requires standard interpolants)")
-        print("="*70)
-    
-    return {'status': 'created'}
-
-
-if __name__ == "__main__":
-    """
-    Example usage of 2D stochastic interpolants.
-    """
-    
-    print("\n" + "="*70)
-    print("STOCHASTIC 2D INTERPOLANTS MODULE")
-    print("="*70)
-    print("\nThis module builds real 2D time-delayed feedback interpolants")
-    print("(time, metallicity) from stochastic stellar populations.")
-    print("\nTypical workflow:")
-    print("  1. Sample population ONCE (metallicity-independent)")
-    print("  2. Build 2D interpolants for multiple metallicities")
-    print("  3. Use in TODDLERS simulations")
-    print("="*70)
-    
-    # Example (requires database to exist)
-    try:
-        from stochastic.sampling import sample_imf_discrete, sample_ages
-
-        print("\nExample: Building 2D interpolants for 10^5 Msun population")
-        print("-"*70)
-
-        # Sample population ONCE (discrete grid masses)
-        masses = sample_imf_discrete(
-            total_mass=1e5,
-            database_path='database.h5',
-            metallicity='MW',
-            m_upper=120.0,
-            imf_name='kroupa',
-            seed=123
-        )
-        
-        ages = sample_ages(
-            n_stars=len(masses),
-            t_sf_myr=5.0,
-            mode='uniform',
-            seed=123
-        )
-        
-        print(f"\nSampled {len(masses)} stars")
-        print("\nNow would build 2D interpolants with:")
-        print("  interpolants = build_stochastic_interpolants_2d(")
-        print("      masses, ages, 'database.h5',")
-        print("      metallicities=['SMC', 'LMC', 'MW']")
-        print("  )")
-        print("\n(Requires database.h5 to exist)")
-        
-    except Exception as e:
-        print(f"\nCould not run example: {e}")
-        print("(This is expected if database doesn't exist yet)")
+def save_stochastic_interpolants(*args, **kwargs):
+    """Removed: see _PRE_DRAWN_REMOVED. Use StochasticSpec in Evolution."""
+    raise RuntimeError(_PRE_DRAWN_REMOVED.format(name='save_stochastic_interpolants'))

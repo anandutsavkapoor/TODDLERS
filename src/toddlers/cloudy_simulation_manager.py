@@ -1,5 +1,5 @@
 from .imports import os, np, interp1d, subprocess, contextmanager
-from .utils import f_dust_label, resolve_output_root
+from .utils import f_dust_label, resolve_output_root, output_root_of
 from .cloudy_base_input_generator import BaseCloudyInputGenerator
 from .cloudy_shell_model_generator import ShellModelGenerator
 from .cloudy_unified_model_generator import UnifiedModelGenerator
@@ -32,7 +32,7 @@ class CloudySimulationManager:
 
     def __init__(self, sim_out_file, method='toddlers_v1', n_points=None, add_DIG=True, DIG_density=None,
                 logU_background=None, continue_after_dissolution=False, complete_init=True, add_logger=True,
-                f_dust=1.0, small_to_large_ratio=None):
+                f_dust=1.0, small_to_large_ratio=None, output_root=None):
         """
         Initializes the CloudySimulationManager.
 
@@ -46,6 +46,10 @@ class CloudySimulationManager:
             continue_after_dissolution (bool): Whether to run Cloudy after dissolution time with DIG/dissolved runs.
             complete_init (bool): Whether to fully initialize, data processing is done and is slow.  
             add_logger (bool): Whether to add a logger. If false, log items are printed instead.
+            output_root (str, optional): base directory for cloudy_output/. Default: the root
+                the evolution .dat lives under (parent of its evolution_output/), else the root
+                recorded in the .dat (``output_root``, written since 2.1.0), else
+                $TODDLERS_OUTPUT_ROOT, else the package's parent directory.
         """
         self.complete_init = complete_init
         self.sim_out_file = sim_out_file
@@ -53,8 +57,11 @@ class CloudySimulationManager:
         self.add_logger = add_logger
         self.f_dust = f_dust
         self.small_to_large_ratio = small_to_large_ratio
+        self.output_root = os.path.abspath(output_root) if output_root else None
 
         self.simulation_params, self.all_results = load_output_file(self.sim_out_file)
+        if self.simulation_params.get('stochastic') is not None:
+            self.simulation_params['_dat_path'] = self.sim_out_file
         self.create_cloudy_directory()
 
         if self.complete_init:
@@ -130,9 +137,15 @@ class CloudySimulationManager:
 
         src_dir = os.path.dirname(os.path.abspath(__file__))
         project_root = os.path.dirname(src_dir)
-        # Cloudy output is large; honor $TODDLERS_OUTPUT_ROOT so it can live on scratch instead
-        # of inside the package install dir (the historical, install-location-bound default).
-        self.results_dir = os.path.join(resolve_output_root(project_root), CLOUDY_OUTPUT_DIR)
+        # Cloudy output is large, so it can live on scratch instead of inside the package
+        # install dir. Root: the output_root
+        # argument, else the root the evolution .dat lives under (the directory holding its
+        # evolution_output/, so the Cloudy files go where the evolution files are, also after
+        # the run is moved), else the root recorded in the .dat, else $TODDLERS_OUTPUT_ROOT,
+        # else the default.
+        root = (self.output_root or output_root_of(self.sim_out_file)
+                or self.simulation_params.get('output_root') or resolve_output_root(project_root))
+        self.results_dir = os.path.join(root, CLOUDY_OUTPUT_DIR)
 
         params = self.simulation_params
         params_dir = (
@@ -150,6 +163,8 @@ class CloudySimulationManager:
             params_dir += "_dynDens"
 
         params_dir += f_dust_label(self.f_dust)
+        if params.get('stochastic') is not None:
+            params_dir += f"_seed{params['stochastic']['base_seed']}"
 
         self.cloudy_run_dir = os.path.join(
             self.results_dir, 

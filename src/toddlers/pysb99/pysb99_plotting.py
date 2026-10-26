@@ -20,7 +20,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from matplotlib.colors import LogNorm
-import seaborn as sns
 from typing import Dict, List, Optional, Tuple, Any
 from .pysb99_core import StellarPopulationResults, StellarPopulationConfig, safe_log10
 

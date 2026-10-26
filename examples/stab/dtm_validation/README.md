@@ -9,7 +9,7 @@ library.
 
 Three checks are specific to the f_dust axis (scripts here); one is the general nebular-physics
 check (`../physics_checks.py`). All figures use the repository A&A style
-(`../../paper_figures/paper_style.mplstyle`) and are produced for one representative cloud
+(`../paper_style.mplstyle`) and are produced for one representative cloud
 cell, `Z = 0.02`, `eps_SF = 0.05`, `n_cl = 160 cm^-3` (BPASS chab100 bin, 10 Myr SFH), which
 is changeable via `--Z/--sfe/--ncl`.
 

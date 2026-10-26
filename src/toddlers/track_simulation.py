@@ -221,6 +221,7 @@ class TrackSimulation:
             all_results (list): List of dictionaries, each containing a generation's results.
             logger: logger object
         """
+        from .utils import json_default
         output_data = {
             "parameters": simulation_params,
             "generations": []
@@ -267,8 +268,14 @@ class TrackSimulation:
             }
             output_data["generations"].append(gen_data)
 
-        with open(output_file, 'w') as f:
-            json.dump(output_data, f, indent=2)
+        # atomic: a run killed while writing leaves no truncated .dat under the final name.
+        # The temporary file is made by open() (not mkstemp, which gives 0600), so the .dat
+        # gets the usual 0666 & ~umask and stays readable to the group on shared filesystems.
+        from ._fileutils import atomic_text_write
+        with atomic_text_write(output_file) as f:
+            # numpy-typed values (from numpy-typed constructor arguments, in the parameters
+            # and in every generation's record) are written as plain types
+            json.dump(output_data, f, indent=2, default=json_default)
 
         # Generate and write summary
         summary_file = os.path.splitext(output_file)[0] + '.summary'
@@ -291,8 +298,14 @@ def load_output_file(file_path):
         data = json.load(f)
 
     simulation_params = data["parameters"]
-    path_params = extract_params_from_path(file_path)
-    simulation_params.update(path_params)
+    inputs = simulation_params.get("inputs")
+    if inputs is not None:
+        # 2.1 files carry their exact inputs: the file can be moved or renamed, and M_cl_init
+        # is not rounded to the 0.01 dex of the file name. formation_timescale is set for
+        # constant-SFR runs only, as the file name (_tform) did.
+        simulation_params.update(params_from_inputs(inputs))
+    else:
+        simulation_params.update(extract_params_from_path(file_path))
 
     all_results = []
 
@@ -341,6 +354,19 @@ def load_output_file(file_path):
         all_results.append(gen_results)
 
     return simulation_params, all_results
+
+
+def params_from_inputs(inputs):
+    """The parameters extract_params_from_path reads from a file path, taken from a 2.1 .dat's
+    exact 'inputs' record instead (same keys and units: M_cl_init in Msun, formation_timescale
+    in s)."""
+    params = {k: inputs[k] for k in ('Z', 'eta_sf', 'n_cl', 'template', 'imf', 'star_type',
+                                     'cluster_formation_mode', 'profile_type', 'add_cover_frac',
+                                     'post_sweep_covering_fraction', 'dynamic_cloud_density')}
+    params['M_cl_init'] = inputs['M_cl_init_msun']
+    if inputs['cluster_formation_mode'] == 'constant_sfr' and inputs.get('formation_timescale_myr') is not None:
+        params['formation_timescale'] = inputs['formation_timescale_myr'] * MYR_TO_SEC
+    return params
 
 
 def extract_params_from_path(file_path):

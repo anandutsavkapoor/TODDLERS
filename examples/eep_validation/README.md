@@ -7,7 +7,8 @@ the optional interpolation mode used by the stochastic sampler.
 Run any script from this directory, e.g. `python3 eep_config_validation.py MW`.
 Each accepts an optional metallicity list (default `MW LMC SMC MWC`). Figures
 (PDF) are written next to the scripts. Everything here runs from the committed
-pySB99 tracks; no extra data download is needed.
+pySB99 tracks and the single-star database (`python scripts/download_data.py
+--stochastic-tracks`).
 
 ## Method (following MIST, Dotter 2016)
 1. Detect comprehensive primary markers on each track (`detect_eeps_comprehensive`):

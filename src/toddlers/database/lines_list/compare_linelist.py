@@ -1,3 +1,5 @@
+"""Compare two Cloudy line-list files (python compare_linelist.py <a.dat> <b.dat>)."""
+
 def clean_line(line):
     """Clean a line for comparison by removing comments and extra whitespace."""
     # Remove comments
@@ -60,5 +62,8 @@ def compare_line_lists(file1, file2):
     print(f"Lines only in {file2}: {len(only_in_2)}")
     print(f"Lines in both files: {len(set1 & set2)}")
 
-# Run comparison
-compare_line_lists('cloudy_lines_TODDLERS_v1.dat', 'cloudy_lines_TODDLERS_v2.dat')
+if __name__ == '__main__':
+    import sys
+    if len(sys.argv) != 3:
+        sys.exit("usage: python compare_linelist.py <list_a.dat> <list_b.dat>")
+    compare_line_lists(sys.argv[1], sys.argv[2])
