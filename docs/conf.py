@@ -37,7 +37,7 @@ def setup(app):
 project = "TODDLERS"
 copyright = "2026, Anand Utsav Kapoor"
 author = "Anand Utsav Kapoor"
-release = "2.0"
+release = "2.1.0"
 
 # -- General configuration ---------------------------------------------------
 extensions = [

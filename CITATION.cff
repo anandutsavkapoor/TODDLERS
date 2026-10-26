@@ -6,8 +6,8 @@ authors:
     orcid: https://orcid.org/0000-0002-5187-1725
     affiliation: "Sterrenkundig Observatorium, Universiteit Gent, Belgium"
 title: "TODDLERS 2.0: Stellar feedback and observables across diverse initial mass functions, binary populations, and cloud environments"
-version: 2.0.0
-date-released: 2026-06-13
+version: 2.1.0
+date-released: 2026-10-26
 url: "https://github.com/anandutsavkapoor/TODDLERS"
 license: MIT
 preferred-citation:
