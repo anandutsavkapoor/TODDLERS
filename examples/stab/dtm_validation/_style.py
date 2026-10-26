@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 
 from toddlers.stab.stab_io import read_stab_file
 
-_STYLE = Path(__file__).resolve().parents[2] / "paper_figures" / "paper_style.mplstyle"
+_STYLE = Path(__file__).resolve().parents[1] / "paper_style.mplstyle"
 if _STYLE.exists():
     plt.style.use(str(_STYLE))
 

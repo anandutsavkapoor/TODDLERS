@@ -1,0 +1,26 @@
+{
+ "schema": "toddlers.data_resources",
+ "schema_version": 1,
+ "resources": {
+  "cloudy_resources": {
+   "version": "2.0",
+   "kind": "zip",
+   "file": "toddlers_temp.zip",
+   "drive_id": "12Gk6wJAjtft5huRbl9RJyiD8vscOIjT_",
+   "md5": "d48f020b7208cb584a77f94bc4c559ab",
+   "size_mb": 260,
+   "install_to": "cloudy_data_dir",
+   "note": "Cloudy star tables (BPASS chab100 resFac10, SB99 kroupa100); unchanged in 2.1.0"
+  },
+  "single_star_tracks": {
+   "version": "2.1.0",
+   "kind": "file",
+   "file": "single_star_tracks.h5",
+   "drive_id": "1HUOyWr0f3WuSEv2PeNalZxcFeDppJvnv",
+   "md5": "50b63fe441a9387d7a414654da4c0abe",
+   "size_mb": 583,
+   "install_to": "database_dir",
+   "note": "single-star feedback database (stochastic sampler)"
+  }
+ }
+}

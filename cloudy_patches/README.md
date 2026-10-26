@@ -9,8 +9,8 @@ excluded. It is the diffuse continuum analogue of Cloudy's *intrinsic* line lumi
 the emission a downstream dust radiative-transfer code (e.g. SKIRT) needs as input, so the
 code can apply dust attenuation itself without double-counting.
 
-"Unattenuated" here means **un-attenuated by dust**, not optically thin to everything — see
-*Physics* below for why the gas opacity must stay.
+"Unattenuated" here means **un-attenuated by dust**, not optically thin to everything (see
+*Physics* below for why the gas opacity must stay).
 
 ### Usage
 
@@ -27,10 +27,14 @@ save last diffuse continuum unattenuated ".diffContUnatt" units micron
 
 ### Base version and compatibility
 
-These patches are against Cloudy C22, commit `01c4cfc6` (master branch, updated 2025).
+**Production base.** The released TODDLERS grids were run with Cloudy master commit
+`013dc0bf` (2024-12-02) plus this patch. The patch file itself was made against master
+commit `01c4cfc6` (2026-03-11); it applies to both (`patch -p1 --dry-run`: clean on
+`01c4cfc6`; on `013dc0bf` the three `save_do.cpp` hunks apply with a -1 line offset).
+Use `013dc0bf` to reproduce the released models.
 
 Verified to apply (`git apply`) **and** compile cleanly on **C22.00**, the 2025 master
-branch, and **C25.00** — the continuum internals the patch touches
+branch, and **C25.00**: the continuum internals the patch touches
 (`ConEmitOut`/`ConEmitLocal`, `opac.ExpZone`/`opac.opacity_abs`/`opac.tmn`,
 `radius.dVolOutwrd`, `gv.dstab`/`gv.GrainEmission`, the `save diffuse continuum` parser)
 are unchanged across that range, so `apply_patch.sh` works on all of them. A future release
@@ -69,7 +73,7 @@ cd source && make -j4
 ```
 
 (The seven full source files are also included for a last-resort verbatim copy; `apply_patch.sh
-FORCE_COPY=1` uses them. They are the C22/`01c4cfc6` versions, so only use that on a close base.)
+FORCE_COPY=1` uses them. They are the patched `01c4cfc6` versions, so only use that on a close base.)
 
 ### Physics
 
@@ -82,21 +86,38 @@ ConEmitOut[i] += ConEmitLocal[nzone][i] * dVolOutwrd * opac.tmn[i];  // local em
 
 with two distinct opacity effects, both using `opac.opacity_abs` (**gas + dust**):
 
-* `opac.ExpZone[i] = exp(-opacity_abs * dr/2)` — the **inter-zone** transmission applied to the
-  accumulated continuum at every outward step (this is the dominant, cumulative attenuation).
-* `opac.tmn[i] = (1 - e^-dτ)/dτ` — the **within-zone** mean escape factor for emission generated
-  inside the current zone (a small, ~1–5 %, energy-conservation term).
+* `opac.ExpZone[i] = exp(-opacity_abs * dr * fillfac)`: the **inter-zone** transmission across
+  the whole zone, applied to the accumulated continuum at every outward step (this is the
+  dominant, cumulative attenuation). It is set per zone in `rt_continuum.cpp` from
+  `radius.drad_x_fillfac` (lines 161-165 at `013dc0bf`); the `dr/2` forms in
+  `iter_startend.cpp` are initializations only.
+* `opac.tmn[i] = (1 - e^-dτ)/dτ` with `dτ = opacity_abs * dr` (`zone_startend.cpp`): the
+  **within-zone** mean escape factor for emission generated inside the current zone (a
+  small, ~1–5 %, energy-conservation term).
 
 `ConEmitOutUnatt` keeps the same structure but removes **only the dust extinction**, by rescaling
 `ExpZone` by the gas fraction of the absorption opacity, and subtracts the grain thermal emission:
 
 ```
 dustOpacAbs = gv.dstab[i] * hden;                                    // dust term in opacity_abs (opacity_addtotal.cpp)
-ExpZoneGas  = ExpZone[i] ^ ((opacity_abs - dustOpacAbs)/opacity_abs); // = exp(-(opacity_abs - dust)*dr/2)
+ExpZoneGas  = ExpZone[i] ^ ((opacity_abs - dustOpacAbs)/opacity_abs); // = exp(-(opacity_abs - dust)*dr*fillfac)
 ConEmitOutUnatt[i] *= ExpZoneGas * DilutionHere;
 gasEmit = ConEmitLocal[nzone][i] - GrainEmission[i];                 // gas-only source
 ConEmitOutUnatt[i] += gasEmit * dVolOutwrd * opac.tmn[i];            // within-zone escape kept
 ```
+
+**Known limitation of this patch version (fixed in patch v2).** `opac.tmn` is Cloudy's
+gas + dust escape factor, so emission in `DiffContUnatt` still loses about half of its
+birth zone's dust optical depth. Measured on v2-DTM models the deficit is at most 0.4 % in
+the optical and about 1.5 % in the FUV. Patch v2 will use a gas-only `tmn`, together with
+other fixes from a code review: the scattering loss is missing on `ConEmitOutUnatt`
+(irrelevant for the closed `sphere` geometry TODDLERS uses), the emission goes negative
+below the plasma frequency (radio only), and some comments inside the patch are stale
+(the `rt_continuum.cpp` comment says `dr/2` where Cloudy uses the full zone; comments in
+`rfield.h` ("WITHOUT attenuation by intervening opacity (opac.tmn)"), `parse_save.cpp`
+("without self-absorption") and `save_do.cpp` ("WITHOUT self-absorption (no opac.tmn
+factor)") predate the gas-extinction design: the gas attenuation and `opac.tmn` are applied). The `.patch` file is unchanged
+in 2.1.0 so that it stays byte-identical to the one the released models were built with.
 
 **Why keep the gas extinction.** The gas continuous opacity is large below the Lyman limit
 (H photoionization), where the ground-state recombination continuum is reabsorbed on-the-spot.

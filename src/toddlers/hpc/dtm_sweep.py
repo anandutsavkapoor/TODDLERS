@@ -3,7 +3,7 @@ r"""Per-DTM sweep coordinator: keep the live Cloudy footprint bounded by running
 time and deleting its (bulky, truth) cloudy_output only after it is verified.
 
 The variable-DTM library is a full-grid Cloudy sweep over several f_dust; all DTMs' Cloudy
-output at once would be several TiB. This coordinator instead, for each f_dust in turn:
+output at once would be several TiB. This coordinator instead, for each f_dust in turn::
 
     submit a single-DTM campaign (--stab none -> builds only that DTM's interpolant .pkl)
       -> wait for it to finish (the .stab_build_complete sentinel)
@@ -15,7 +15,7 @@ output at once would be several TiB. This coordinator instead, for each f_dust i
 It is fully RESUMABLE from on-disk state (so it survives its own death -- relaunching just
 continues) and prints a complete plan under --dry-run without submitting or deleting anything.
 
-State per DTM, read from disk:
+State per DTM, read from disk::
     interpolant .pkl present AND its cloudy_output gone   -> DONE (skip)
     interpolant .pkl present AND cloudy_output still there -> NEEDS_GATE (re-verify, then delete)
     neither                                                -> NEEDS_RUN (submit campaign)
@@ -116,7 +116,7 @@ def _campaign_cmd(args, dtm):
     if args.activate_env:
         cmd += ["--activate-env", args.activate_env]   # extra module-load lines for every campaign job
     if args.output_root:
-        cmd += ["--output-root", args.output_root]     # where cloudy_output/ is written+read (scratch)
+        cmd += ["--output-root", args.output_root]     # exported as TODDLERS_OUTPUT_ROOT to the jobs
     return cmd
 
 
@@ -201,10 +201,12 @@ def main():
     ap.add_argument("--work-root", required=True, help="coordinator state + per-DTM work dirs")
     ap.add_argument("--cloudy-output", required=True,
                     help="Cloudy output root this coordinator scans + deletes per DTM. Must equal "
-                         "<output-root>/cloudy_output (where the campaign jobs actually write).")
+                         "<root>/cloudy_output, where <root> holds the evolution_output/ of "
+                         "--evolution-dir (the Cloudy jobs write next to the .dat files).")
     ap.add_argument("--output-root", default="",
-                    help="base dir for cloudy_output/, forwarded to campaign as --output-root "
-                         "(exported as TODDLERS_OUTPUT_ROOT). Set it to the run root on scratch.")
+                    help="forwarded to campaign as --output-root (exported as TODDLERS_OUTPUT_ROOT "
+                         "to the jobs); the Cloudy output itself goes next to the evolution_output/ "
+                         "of --evolution-dir (see --cloudy-output).")
     ap.add_argument("--stab-dir", required=True, help="holds <prefix>_interp_tables (.pkls accumulate)")
     ap.add_argument("--cache-dir", required=True, help="interpolant cache (on scratch)")
     ap.add_argument("--prefix", default="BPASS_chab100_bin")

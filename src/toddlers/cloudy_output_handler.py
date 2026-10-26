@@ -42,7 +42,8 @@ class CloudyOutputHandler:
         self.skip_lines = [('mg', 7, 9.03094)] # wavelength has to be in micron
         
         # Process outputs
-        if self.check_cloudy_success(self.check_file_stability) and self.parse_data:
+        # the stability check reads self.check_file_stability; print_traceback stays off
+        if self.check_cloudy_success() and self.parse_data:
             self.parse_output()
 
     def check_input_exists(self):
@@ -123,7 +124,8 @@ class CloudyOutputHandler:
 
             # Check file stability if requested
             if success and self.check_file_stability:
-                required_files = ['cont', 'phy', 'rad']
+                # a dissolved model saves only its continuum
+                required_files = ['cont'] if self.model_prefix == 'dissolved' else ['cont', 'phy', 'rad']
                 for ext in required_files:
                     file_path = self.get_file_path(ext)
                     if not is_file_stable(file_path):
@@ -150,6 +152,8 @@ class CloudyOutputHandler:
         The downstream SED interpolant + STAB build reads, per phase:
           dissolved        -> .cont
           shell / unified  -> .cont, .ovr, .phy, .rad, .cum, .cumEmer
+          dig              -> .cont, .ovr, .phy, .rad, .cum (no grains, so no .cumEmer)
+        .cumEmer is required whenever the input saves it.
         A disk-full mid-write can leave a model that "exited OK" but with one of these
         truncated to 0 bytes or with its first (header) row clobbered to NUL bytes (a file
         hole) or whitespace; both make the build produce empty continuum / line-less HR
@@ -161,7 +165,9 @@ class CloudyOutputHandler:
         if self.model_prefix == 'dissolved':
             required = ('cont',)
         else:
-            required = ('cont', 'ovr', 'phy', 'rad', 'cum', 'cumEmer')
+            required = ('cont', 'ovr', 'phy', 'rad', 'cum')
+            if self._requested_cumemer():
+                required += ('cumEmer',)
         hashed = {'cont', 'ovr', 'phy', 'cum', 'cumEmer'}
         for ext in required:
             path = self.get_file_path(ext)
@@ -178,6 +184,15 @@ class CloudyOutputHandler:
             if ext in hashed and not cleaned.startswith('#'):
                 return False
         return True
+
+    def _requested_cumemer(self):
+        """True if this model's input saves .cumEmer (emergent lines are saved only with grains,
+        so a DIG model has none). Without a readable input, shell/unified are assumed to."""
+        try:
+            with open(self.get_file_path('in'), 'r', errors='replace') as f:
+                return '".cumEmer"' in f.read()
+        except OSError:
+            return self.model_prefix in ('shell', 'unified')
 
     def get_file_path(self, extension):
         return f"{self.base_filename}.{extension}"
@@ -525,62 +540,65 @@ class CloudyOutputHandler:
         Returns:
             list: List of dictionaries containing line information
             Wavelengths are returned in microns
+
+        Raises:
+            FileNotFoundError: the line list is missing.
+            ValueError: a line of the list cannot be parsed (file and line number given).
         """
         src_dir = os.path.dirname(os.path.abspath(__file__))
         line_list_path = os.path.join(src_dir, 'database', 'lines_list', 
                                     'cloudy_lines_TODDLERS_v2.dat')
                 
-        try:
-            lines = []
-            molecular_species = {'CO', 'CN', 'CS', 'HCN', 'HNC', 'NH3'}
-            
-            with open(line_list_path, 'r') as f:
-                for line in f:
-                    if line.strip() and not line.strip().startswith('#'):
-                        try:
-                            # Parse line into components
-                            parts = line.strip().split()
-                            if len(parts) < 2:
-                                continue
-                                
-                            # Get wavelength in microns for comparison with skip list                            
-                            wavelength = self._parse_wavelength(parts[-1]) # wavelength float in micron
-                            wavelength_str = str(wavelength) + 'm'
-                            
-                            # Check if this is a molecular line
-                            is_molecular = any(species in molecular_species 
-                                            for species in parts[:-1])
-                            
-                            # Create line information based on type
-                            if is_molecular or parts[0].lower() == 'blnd':
-                                lines.append({
-                                    'element': parts[0],
-                                    'ion': 0,
-                                    'wavelength': wavelength_str
-                                })
-                            else:
-                                ion_level = int(parts[1]) if len(parts) > 1 else 1
-                                check_id = (parts[0].lower(), ion_level, wavelength)
-                                
-                                # Skip if line is in skip_lines list
-                                if check_id in self.skip_lines:
-                                    continue
-                                    
-                                lines.append({
-                                    'element': parts[0],
-                                    'ion': ion_level,
-                                    'wavelength': wavelength_str
-                                })
-                                
-                        except (ValueError, IndexError):
+        lines = []
+        molecular_species = {'CO', 'CN', 'CS', 'HCN', 'HNC', 'NH3'}
+
+        # A missing or unreadable list raises (FileNotFoundError / OSError): an empty
+        # line set must never reach the line readers silently.
+        with open(line_list_path, 'r') as f:
+            for line_no, line in enumerate(f, start=1):
+                if not line.strip() or line.strip().startswith('#'):
+                    continue
+                try:
+                    # Parse line into components
+                    parts = line.strip().split()
+                    if len(parts) < 2:
+                        raise ValueError("expected '<species> [<ion>] <wavelength>'")
+
+                    # Get wavelength in microns for comparison with skip list
+                    wavelength = self._parse_wavelength(parts[-1]) # wavelength float in micron
+                    if wavelength is None:
+                        raise ValueError(f"unreadable wavelength {parts[-1]!r}")
+                    wavelength_str = str(wavelength) + 'm'
+
+                    # Check if this is a molecular line
+                    is_molecular = any(species in molecular_species
+                                    for species in parts[:-1])
+
+                    # Create line information based on type
+                    if is_molecular or parts[0].lower() == 'blnd':
+                        lines.append({
+                            'element': parts[0],
+                            'ion': 0,
+                            'wavelength': wavelength_str
+                        })
+                    else:
+                        ion_level = int(parts[1]) if len(parts) > 1 else 1
+                        check_id = (parts[0].lower(), ion_level, wavelength)
+
+                        # Skip if line is in skip_lines list
+                        if check_id in self.skip_lines:
                             continue
-                            
-            return lines
-            
-        except Exception as e:
-            print(f"Error reading line list: {str(e)}")
-            traceback.print_exc()
-            return []
+
+                        lines.append({
+                            'element': parts[0],
+                            'ion': ion_level,
+                            'wavelength': wavelength_str
+                        })
+                except (ValueError, IndexError) as e:
+                    raise ValueError(f"Cannot parse line {line_no} of the Cloudy line list "
+                                     f"{line_list_path}: {line.strip()!r} ({e})") from e
+
+        return lines
 
     def get_wavelength_grid(self):
         """

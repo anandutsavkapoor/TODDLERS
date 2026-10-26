@@ -31,6 +31,8 @@ preferred-citation:
   title: "TODDLERS 2.0: Stellar feedback and observables across diverse initial mass functions, binary populations, and cloud environments"
   journal: "Astronomy & Astrophysics"
   year: 2026
+  volume: 713
+  start: "A227"
   doi: "10.1051/0004-6361/202660433"
 references:
   - type: article

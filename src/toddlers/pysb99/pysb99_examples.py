@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-pysb99_complete_demo.py
+pysb99_examples.py
 ========================
 
 Universal demonstration and testing script for pySB99 integration with TODDLERS.
@@ -15,16 +15,16 @@ This script provides:
 
 Usage:
     # Quick demo
-    python pysb99_complete_demo.py --mode quick
+    python -m toddlers.pysb99.pysb99_examples --mode quick
     
     # Full workflow
-    python pysb99_complete_demo.py --mode full
+    python -m toddlers.pysb99.pysb99_examples --mode full
     
     # Testing only
-    python pysb99_complete_demo.py --mode test
+    python -m toddlers.pysb99.pysb99_examples --mode test
     
     # Custom IMF comparison
-    python pysb99_complete_demo.py --mode compare --imfs kroupa100 topheavy salpeter
+    python -m toddlers.pysb99.pysb99_examples --mode compare --imfs kroupa100 topheavy salpeter
 
 Author: Anand Utsav KAPOOR
 """
@@ -228,144 +228,103 @@ def generate_custom_populations(pop_names, output_dir='./demo_database',
 
 def verify_files(imf_name, output_dir='./demo_database'):
     """
-    Verify that all required interpolant files were created.
-    
+    Verify that the feedback table of an IMF was written.
+
     Parameters
     ----------
     imf_name : str
         Name of the IMF to check
     output_dir : str
-        Directory containing interpolant files
-        
+        Directory containing the table
+
     Returns
     -------
     all_present : bool
-        True if all files exist
+        True if the table exists
     """
-    expected_files = [
-        f'pySB99interpolation_{imf_name}.obj',
-        f'pySB99interpolation_{imf_name}_LumLymanWerner.obj',
-        f'pySB99interpolation_{imf_name}_mean_ionizing_photon_energy.obj',
-        f'pySB99interpolation_{imf_name}_hardness.obj'
-    ]
-    
+    from toddlers.feedback_tables import table_filename
+    filename = table_filename('pySB99', imf_name)
+    filepath = os.path.join(output_dir, filename)
     print(f"\nVerifying files for {imf_name}:")
-    all_present = True
-    
-    for filename in expected_files:
-        filepath = os.path.join(output_dir, filename)
-        if os.path.exists(filepath):
-            size_kb = os.path.getsize(filepath) / 1024
-            print(f"  ✓ {filename:<60s} ({size_kb:6.1f} KB)")
-        else:
-            print(f"  ✗ {filename:<60s} MISSING")
-            all_present = False
-    
-    return all_present
+    if os.path.exists(filepath):
+        print(f"  OK {filename:<60s} ({os.path.getsize(filepath) / 1024:6.1f} KB)")
+        return True
+    print(f"  MISSING {filename}")
+    return False
 
 
-def test_interpolation(imf_name, output_dir='./demo_database', 
+def test_interpolation(imf_name, output_dir='./demo_database',
                        test_times=[1.0, 5.0, 10.0], test_Z=0.006):
     """
-    Test interpolation at specific time and metallicity points.
-    
+    Read the table with the public reader and print a few quantities, stored and derived.
+
     Parameters
     ----------
     imf_name : str
         Name of IMF to test
     output_dir : str
-        Directory containing interpolant files
+        Directory containing the table
     test_times : array-like
         Times (Myr) to test interpolation
     test_Z : float
-        Metallicity to test
-        
+        Metallicity to test (a node of the table)
+
     Returns
     -------
     success : bool
-        True if interpolation works correctly
+        True if the table reads and answers
     """
-    main_file = os.path.join(output_dir, f'pySB99interpolation_{imf_name}.obj')
-    
-    if not os.path.exists(main_file):
-        print(f"✗ Cannot test {imf_name}: file not found")
+    from toddlers.feedback_tables import load_table, table_filename
+    path = os.path.join(output_dir, table_filename('pySB99', imf_name))
+    if not os.path.exists(path):
+        print(f"Cannot test {imf_name}: file not found")
         return False
-    
-    print(f"\nTesting interpolation for {imf_name} at Z={test_Z}:")
-    
+    print(f"\nTesting {imf_name} at Z={test_Z}:")
     try:
-        with open(main_file, 'rb') as f:
-            interpolants = pickle.load(f)
-        
-        print(f"  Loaded {len(interpolants)} interpolation functions")
-        
-        # Test L_mech interpolation
-        L_mech_interp = interpolants[0]
-        
+        tab = load_table(path)
         for t in test_times:
-            log_L_mech = L_mech_interp(t, test_Z)[0]
-            L_mech = 10**log_L_mech
-            print(f"    t={t:5.1f} Myr: L_mech = {L_mech:.2e} erg/s/M☉")
-        
-        print("  ✓ Interpolation successful")
+            print(f"    t={t:5.1f} Myr: L_mech = {tab.get('L_mech', t, test_Z):.2e}, "
+                  f"Q_HI = {tab.get('Q_HI', t, test_Z):.2e}, "
+                  f"<E_ion> = {tab.get('mean_ionizing_photon_energy_eV', t, test_Z):.2f} (per 1e6 Msun)")
         return True
-        
     except Exception as e:
-        print(f"  ✗ Interpolation failed: {e}")
+        print(f"  Reading failed: {e}")
         return False
 
 
 def verify_toddlers_compatibility(imf_name, output_dir='./demo_database'):
     """
-    Verify that interpolants are compatible with TODDLERS format.
-    
-    Parameters
-    ----------
-    imf_name : str
-        Name of IMF to check
-    output_dir : str
-        Directory containing interpolant files
-        
+    Check that StellarFeedback accepts the table (schema, units, Z nodes).
+
     Returns
     -------
     compatible : bool
-        True if format is compatible
     """
+    import contextlib, io
+    from toddlers.constants import M_SUN
+    from toddlers.feedback_tables import load_table, table_filename
+    from toddlers.stellar_feedback import StellarFeedback
     print(f"\nChecking TODDLERS compatibility for {imf_name}:")
-    
-    main_file = os.path.join(output_dir, f'pySB99interpolation_{imf_name}.obj')
-    
-    if not os.path.exists(main_file):
-        print("  ✗ Main interpolant file not found")
+    path = os.path.join(output_dir, table_filename('pySB99', imf_name))
+    if not os.path.exists(path):
+        print("  Feedback table not found")
         return False
-    
+    old = os.environ.get('TODDLERS_DATA')
     try:
-        with open(main_file, 'rb') as f:
-            interpolants = pickle.load(f)
-        
-        # Check structure
-        expected_count = 7
-        if len(interpolants) == expected_count:
-            print(f"  ✓ Correct number of interpolants: {len(interpolants)}")
-        else:
-            print(f"  ✗ Expected {expected_count}, got {len(interpolants)}")
-            return False
-        
-        # Test interpolation interface
-        test_result = interpolants[0](1.0, 0.006)
-        if isinstance(test_result, np.ndarray) and test_result.shape == (1, 1):
-            print("  ✓ Interpolation interface correct")
-            print(f"    Example: log(L_mech) = {test_result[0,0]:.2f}")
-        else:
-            print(f"  ✗ Unexpected return format: {type(test_result)}, shape {test_result.shape}")
-            return False
-        
-        print("  ✓ Compatible with TODDLERS format")
-        return True
-        
+        tab = load_table(path)
+        os.environ['TODDLERS_DATA'] = output_dir
+        with contextlib.redirect_stdout(io.StringIO()):
+            sf = StellarFeedback('pySB99', float(tab.Z[0]), 1e6 / 0.05 * M_SUN, 0.05, [], imf=imf_name)
+        print(f"  OK: StellarFeedback reads it (Z nodes {list(tab.Z)}, missing {sorted(tab.missing)})")
+        return sf is not None
     except Exception as e:
-        print(f"  ✗ Compatibility check failed: {e}")
+        print(f"  Compatibility check failed: {e}")
         return False
+    finally:
+        if old is None:
+            os.environ.pop('TODDLERS_DATA', None)
+        else:
+            os.environ['TODDLERS_DATA'] = old
 
 
 # ============================================================================
@@ -532,21 +491,16 @@ def plot_evolution_example(imf_name, output_dir='./demo_database',
     if style_path.exists():
         plt.style.use(str(style_path))
     
-    main_file = os.path.join(output_dir, f'pySB99interpolation_{imf_name}.obj')
-    
-    with open(main_file, 'rb') as f:
-        interpolants = pickle.load(f)
-    
-    L_mech_interp = interpolants[0]
-    F_ram_interp = interpolants[1]
-    Q_ion_interp = interpolants[4]
-    
+    from toddlers.feedback_tables import load_table, table_filename
+    tab = load_table(os.path.join(output_dir, table_filename('pySB99', imf_name)))
+
     time_grid = np.logspace(-2, 1.7, 100)
-    
-    # Evaluate feedback
-    L_mech = np.array([10**L_mech_interp(t, Z)[0] * M_stars for t in time_grid])
-    F_ram = np.array([10**F_ram_interp(t, Z)[0] * M_stars for t in time_grid])
-    Q_ion = np.array([10**Q_ion_interp(t, Z)[0] * M_stars for t in time_grid])
+
+    # Evaluate feedback (tables are per 1e6 Msun)
+    scale = M_stars / 1e6
+    L_mech = tab.get('L_mech', time_grid, Z).value * scale
+    F_ram = tab.get('F_ram', time_grid, Z).value * scale
+    Q_ion = tab.get('Q_HI', time_grid, Z).value * scale
     
     fig, axes = plt.subplots(1, 3, figsize=figsize)
     fig.suptitle(f'Stellar Feedback Evolution ({imf_name}, M★ = {M_stars:.0e} M☉, Z = {Z})', 
@@ -596,33 +550,23 @@ def print_toddlers_usage(imf_names, output_dir='./demo_database'):
     print("TODDLERS INTEGRATION")
     print("="*70)
     
-    print("\nStep 1: Copy interpolant files to TODDLERS database directory")
-    print(f"  cp {output_dir}/*.obj /path/to/toddlers_evolution_package/database/")
-    
-    print("\nStep 2: Update stellar_feedback.py (around line 126)")
-    print("  Change:")
-    print("    file_prefix = f'SB99interpolation_{self.imf}'")
-    print("  To:")
-    print("    file_prefix = f'pySB99interpolation_{self.imf}'")
-    
-    print("\nStep 3: Use in your TODDLERS simulations")
+    print("\nStep 1: Put the feedback tables where TODDLERS reads them")
+    print(f"  cp {output_dir}/*_feedback.h5 \"$TODDLERS_DATA\"   (or the package database directory)")
+
+    print("\nStep 2: Use them in TODDLERS")
     print("```python")
-    print("from toddlers_evolution_package.stellar_feedback import StellarFeedback")
+    print("from toddlers.evolution import Evolution")
+    print("from toddlers.constants import M_SUN")
     print()
-    
+
     for imf_name in imf_names[:3]:  # Show first 3 examples
         print(f"# Example: {imf_name}")
-        print("feedback = StellarFeedback(")
-        print("    template='SB99',")
-        print("    Z=0.014,              # MW metallicity")
-        print("    M_cl_init=1e7,        # 10^7 Msun cloud")
-        print("    eta_sf=0.1,           # 10% efficiency")
-        print("    t_list_collapse=[],   # Single burst")
-        print("    mode='burst',")
-        print(f"    imf='{imf_name}'")
-        print(")")
+        print("ev = Evolution(Z=0.014, eta_sf=0.1, n_cl=160.0, M_cl_init=1e7 * M_SUN,")
+        print(f"               template='pySB99', imf='{imf_name}', star_type='sin',")
+        print("               profile_type='uniform')")
+        print("ev.run_simulation()")
         print()
-    
+
     print("```")
     
     print("\nAvailable IMFs:")

@@ -122,6 +122,28 @@ def _run(cmd, *, dry_run=False, **kw):
     subprocess.run(cmd, check=True, **kw)
 
 
+def _output_root(args):
+    """The output root of every stage, by the one rule of utils.resolve_output_root:
+    ``--output-root``, else ``$TODDLERS_OUTPUT_ROOT``, made absolute; '' when neither is set
+    (the jobs then fall back to the package default, ``--toddlers-src``)."""
+    from ..utils import resolve_output_root
+    root = args.output_root or resolve_output_root("")
+    return os.path.abspath(root) if root else ""
+
+
+def _cloudy_root(args):
+    """Where the Cloudy jobs write cloudy_output/: next to the evolution_output/ that holds the
+    .dat files (utils.output_root_of, the rule of CloudySimulationManager and of the STAB build).
+    With --evolution-dir that is the directory's own root; for a fresh grid the evolution
+    output is under the output root."""
+    from ..utils import output_root_of
+    if getattr(args, "evolution_dir", None):
+        root = output_root_of(os.path.abspath(args.evolution_dir))
+        if root:
+            return root
+    return _output_root(args) or args.toddlers_src
+
+
 def _common_replacements(args):
     return {
         "@ACCOUNT@": args.account,
@@ -130,9 +152,9 @@ def _common_replacements(args):
         "@WALLTIME@": args.walltime,
         "@PYTHON_MODULE@": args.python_module,
         "@ACTIVATE_ENV@": args.activate_env,
-        "@OUTPUT_ROOT@": os.path.abspath(args.output_root) if args.output_root else "",
+        "@OUTPUT_ROOT@": _output_root(args),
         "@TODDLERS_SRC@": args.toddlers_src,
-        "@TODDLERS_DATA@": args.toddlers_data or args.toddlers_src.replace("/src", "/src/toddlers/database"),
+        "@TODDLERS_DATA@": args.toddlers_data or os.path.join(args.toddlers_src, "toddlers", "database"),
     }
 
 
@@ -309,8 +331,8 @@ def _submit_postprocess(args, taskdir, after_jobs):
         f"export CLOUDY_EXE={args.cloudy_exe} CLOUDY_DATA_DIR={args.cloudy_data}",
         # Cloudy-output base: the interpolant build must read from the same root the Cloudy
         # workers wrote to (scratch when set), not the package install dir.
-        (f"export TODDLERS_OUTPUT_ROOT={os.path.abspath(args.output_root)}"
-         if args.output_root else ""),
+        (f"export TODDLERS_OUTPUT_ROOT={_output_root(args)}"
+         if _output_root(args) else ""),
         # ---- build-completion guard + self-re-arm bookkeeping ----
         # STAB_DONE marks a fully finished build. The build self-re-arms (afterany) so it
         # survives the walltime: a timed-out build is continued by its successor
@@ -379,7 +401,7 @@ def _submit_postprocess(args, taskdir, after_jobs):
         # so `|| true`: a tar hiccup must not abort the STAB build.
         ('echo "=== archiving non-essential Cloudy output (inode relief) ==="\n'
          f"python3 -m toddlers.hpc.archive_cloudy_output "
-         f"{os.path.join(os.path.abspath(args.output_root) if args.output_root else args.toddlers_src, 'cloudy_output')} || true")
+         f"{os.path.join(_cloudy_root(args), 'cloudy_output')} || true")
         if args.archive_cloudy else "",
         # ---- build (grid complete) ----
         axis_export,
@@ -444,11 +466,12 @@ def _submit_postprocess(args, taskdir, after_jobs):
     return jid
 
 
-def _evolution_leaf_from_grid(grid_path, toddlers_src):
+def _evolution_leaf_from_grid(grid_path, root):
     """Derive the evolution-output leaf directory from the grid JSON.
 
-    Evolution writes to ``<toddlers_src>/evolution_output/template_*/imf_*/star_type_*/
-    cluster_mode_*/profile_type_*/`` (see Evolution.get_output_paths), and the grid JSON
+    Evolution writes to ``<root>/evolution_output/template_*/imf_*/star_type_*/
+    cluster_mode_*/profile_type_*/`` (see Evolution.get_output_paths; root = --output-root,
+    which the evolution job exports as TODDLERS_OUTPUT_ROOT, else the package src), and the grid JSON
     fixes those five axes, so the Cloudy stage's input dir is known before evolution runs.
     Requires each path axis to be single-valued (true for a STAB grid)."""
     import json
@@ -466,7 +489,7 @@ def _evolution_leaf_from_grid(grid_path, toddlers_src):
         return val
 
     return os.path.join(
-        toddlers_src, "evolution_output",
+        root, "evolution_output",
         f"template_{one('template')}", f"imf_{one('imf')}", f"star_type_{one('star_type')}",
         f"cluster_mode_{one('cluster_formation_mode', 'burst')}",
         f"profile_type_{one('profile_type', 'uniform')}")
@@ -520,8 +543,8 @@ def _submit_stage2(args, evo_job, leaf):
         f"module load {args.python_module}" if args.python_module else "",
         args.activate_env, f"export PYTHONPATH={args.toddlers_src}:${{PYTHONPATH:-}}",
         f"export CLOUDY_EXE={args.cloudy_exe} CLOUDY_DATA_DIR={args.cloudy_data}",
-        (f"export TODDLERS_OUTPUT_ROOT={os.path.abspath(args.output_root)}"
-         if args.output_root else ""),
+        (f"export TODDLERS_OUTPUT_ROOT={_output_root(args)}"
+         if _output_root(args) else ""),
         f'echo "stage-2: enumerating Cloudy from {leaf} and submitting the chain"',
         inner,
     ]
@@ -599,10 +622,13 @@ def main(argv=None):
     p.add_argument("--activate-env", default="", help="shell command to activate the toddlers env (conda/venv)")
     p.add_argument("--toddlers-src", required=True, help="path to the package src/ (added to PYTHONPATH)")
     p.add_argument("--output-root", default="",
-                   help="base dir under which cloudy_output/ is written and read (it is large: "
-                        "~0.5 TiB per DTM on a full grid). Default: the package's parent dir "
-                        "(install-location-bound). Point it at scratch for big runs; it is exported "
-                        "as TODDLERS_OUTPUT_ROOT to every Cloudy/build job so writer and reader agree.")
+                   help="base dir under which a fresh grid writes evolution_output/, "
+                        "evolution_logs/ and cloudy_output/ (Cloudy output is large: ~0.5 TiB per DTM "
+                        "on a full grid). Default: $TODDLERS_OUTPUT_ROOT when set, else the package's "
+                        "parent dir. Point it at scratch for big runs; it is exported as "
+                        "TODDLERS_OUTPUT_ROOT to every job. The Cloudy output always goes next to the "
+                        "evolution_output/ that holds the .dat files, so with --evolution-dir it is "
+                        "under that directory's root.")
     p.add_argument("--toddlers-data", default=None, help="TODDLERS_DATA dir (default: <src>/toddlers/database)")
     p.add_argument("--cloudy-exe", default="cloudy.exe")
     p.add_argument("--cloudy-data", default="", help="Cloudy data dir (CLOUDY_DATA_DIR)")
@@ -616,7 +642,8 @@ def main(argv=None):
         # From scratch: Cloudy enumeration reads the evolution .dat, which don't exist
         # until evolution finishes, so the Cloudy+STAB stage is deferred to a dependent
         # stage-2 job. The grid JSON gives the evolution leaf dir up front.
-        leaf = _evolution_leaf_from_grid(args.grid, args.toddlers_src)
+        leaf = _evolution_leaf_from_grid(
+            args.grid, _output_root(args) or args.toddlers_src)
         taskfile = _gen_evolution_tasks(args)
         evo_job = _submit_evolution(args, taskfile)
         _submit_stage2(args, evo_job, leaf)

@@ -63,7 +63,8 @@ def chabrier_imf(m: np.ndarray) -> np.ndarray:
         -(np.log10(m[mask_low]) - np.log10(m_c))**2 / (2 * sigma**2)
     )
     mask_high = (m >= 1.0) & (m <= 100.0)
-    norm_factor = (1.0 / 1.0) * np.exp(0) / (1.0**(-2.3))
+    # Continuity at 1 Msun: the power law takes the log-normal's value there.
+    norm_factor = np.exp(-(np.log10(m_c))**2 / (2 * sigma**2))
     xi[mask_high] = norm_factor * m[mask_high]**(-2.3)
     return xi
 
@@ -94,8 +95,9 @@ def sample_imf(
     The resulting total mass will be close to but not exactly equal to
     total_mass.
 
-    NOTE: This produces continuous mass values. For exact database grid masses,
-    use sample_imf_discrete() instead.
+    NOTE: This uses numpy's global random state. For run-time stochastic populations
+    (one independent stream per generation) use
+    toddlers.pysb99.stochastic.population.draw_stop_after.
     """
     if seed is not None:
         np.random.seed(seed)
@@ -147,149 +149,17 @@ def sample_imf(
     return masses
 
 
-def sample_imf_discrete(
-        total_mass: float,
-        database_path: str,
-        metallicity: str,
-        m_upper: float,
-        imf_name: str = 'kroupa',
-        imf_func: Optional[Callable] = None,
-        rotation: bool = False,
-        seed: Optional[int] = None,
-        max_mass_error_pct: float = 1.0,
-        verbose: bool = False) -> np.ndarray:
-    """
-    Sample stellar masses from discrete database grid.
+def sample_imf_discrete(*args, **kwargs):
+    """Removed in 2.1.0.
 
-    This ensures all sampled masses exactly match database entries,
-    avoiding mass interpolation in query operations. The mass grid
-    is truncated at m_upper before sampling, so the full mass budget
-    goes into stars <= m_upper.
-
-    Parameters
-    ----------
-    total_mass : float
-        Target total stellar mass [Msun]
-    database_path : str
-        Path to HDF5 database
-    metallicity : str
-        Metallicity identifier (MW, LMC, etc.)
-    m_upper : float
-        Upper stellar mass limit [Msun]. The database grid is truncated
-        at this value before sampling.
-    imf_name : str
-        IMF name ('kroupa', 'salpeter', etc.)
-    imf_func : callable, optional
-        Custom IMF function. If provided, overrides imf_name
-    rotation : bool
-        Use rotating stellar models
-    seed : int, optional
-        Random seed for reproducibility
-    max_mass_error_pct : float
-        Maximum allowed error in total mass (default: 1%)
-        If exceeded, raises warning
-    verbose : bool
-        Print diagnostics
-        
-    Returns
-    -------
-    np.ndarray
-        Stellar masses [Msun], all exact grid values
-        
-    Notes
-    -----
-    This function:
-    1. Samples from continuous IMF distribution
-    2. Rounds each mass to nearest database grid point
-    3. Final total mass may differ from target by ~0.1-1% due to rounding
-    
-    All returned masses are guaranteed to be exact database grid values,
-    eliminating interpolation overhead in feedback queries.
-    
-    Examples
-    --------
-    >>> from stochastic.sampling import sample_imf_discrete
-    >>> masses = sample_imf_discrete(
-    ...     total_mass=1e6,
-    ...     database_path='database.h5',
-    ...     metallicity='MW',
-    ...     m_upper=120.0,
-    ...     seed=42
-    ... )
-    >>> # All masses are now exact grid values - no interpolation needed
-    """
-    # Import here to avoid circular dependency
-    import sys
-    import os
-    parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    if parent_dir not in sys.path:
-        sys.path.insert(0, parent_dir)
-    
-    from toddlers.pysb99.stochastic.database import get_available_mass_grid
-    
-    if seed is not None:
-        np.random.seed(seed)
-    
-    # Get discrete mass grid from database, truncated at m_upper
-    mass_grid = get_available_mass_grid(metallicity, rotation)
-    mass_grid = mass_grid[mass_grid <= m_upper]
-
-    if len(mass_grid) == 0:
-        raise ValueError(
-            f"No database masses <= {m_upper:.1f} Msun for metallicity {metallicity}"
-        )
-
-    if verbose:
-        print(f"Database mass grid: {len(mass_grid)} masses")
-        print(f"  Range: {mass_grid.min():.2f} - {mass_grid.max():.2f} Msun")
-
-    # Sample from continuous IMF first
-    m_min = mass_grid.min()
-    m_max = mass_grid.max()
-    
-    continuous_masses = sample_imf(
-        total_mass=total_mass,
-        imf_name=imf_name,
-        imf_func=imf_func,
-        m_min=m_min,
-        m_max=m_max,
-        seed=seed
-    )
-    
-    if verbose:
-        print(f"Sampled {len(continuous_masses)} stars from continuous IMF")
-        print(f"  Continuous total mass: {np.sum(continuous_masses):.2e} Msun")
-    
-    # Round each mass to nearest grid point
-    discrete_masses = np.array([
-        mass_grid[np.argmin(np.abs(mass_grid - m))]
-        for m in continuous_masses
-    ])
-    
-    # Check mass error
-    actual_total = np.sum(discrete_masses)
-    error_pct = 100 * abs(actual_total - total_mass) / total_mass
-    
-    if verbose or error_pct > max_mass_error_pct:
-        print(f"Discrete sampling results:")
-        print(f"  Target mass:  {total_mass:.2e} Msun")
-        print(f"  Actual mass:  {actual_total:.2e} Msun")
-        print(f"  Error:        {error_pct:.2f}%")
-        print(f"  N stars:      {len(discrete_masses)}")
-    
-    if error_pct > max_mass_error_pct:
-        warnings.warn(
-            f"Discrete sampling mass error ({error_pct:.2f}%) exceeds threshold "
-            f"({max_mass_error_pct:.1f}%). Consider using larger population "
-            f"or accepting continuous masses with interpolation."
-        )
-    
-    # Verify all masses are in grid (sanity check)
-    for m in discrete_masses:
-        if m not in mass_grid:
-            raise ValueError(f"Mass {m:.1f} not in database grid - this is a bug!")
-    
-    return discrete_masses
+    Use toddlers.pysb99.stochastic.population instead: IMFSpec(name, m_low, m_up) names
+    the full range, draw_stop_after(...) draws continuous masses, and
+    StellarFeedback/Evolution(template='pySB99', stochastic=StochasticSpec(...)) draws one
+    independent population per generation at run time."""
+    raise RuntimeError(
+        "sample_imf_discrete was removed in 2.1.0. "
+        "Use toddlers.pysb99.stochastic.population (IMFSpec, draw_stop_after, StochasticSpec; "
+        "Evolution(template='pySB99', imf=None, stochastic=StochasticSpec(...))).")
 
 
 # ============================================================================
@@ -431,51 +301,7 @@ def plot_population_diagnostics(
 # ============================================================================
 
 if __name__ == "__main__":
-
-    print(">>> Discrete Sampling (Exact Grid Masses)")
-    print("This requires a database file. Attempting to use default location...")
-
-    try:
-        from toddlers._paths import get_database_path
-        database_path = get_database_path()   # $TODDLERS_DATA or <package>/database
-
-        print(f"Using database at: {database_path}")
-
-        if os.path.exists(database_path):
-            masses_discrete = sample_imf_discrete(
-                total_mass=500.0,
-                database_path=database_path,
-                metallicity='MW',
-                m_upper=120.0,
-                imf_name='kroupa',
-                seed=123,
-                verbose=True
-            )
-
-            ages_discrete = sample_ages(
-                n_stars=len(masses_discrete),
-                t_sf_myr=2.0,
-                mode='uniform',
-                seed=456
-            )
-
-            plot_population_diagnostics(
-                masses_discrete, ages_discrete,
-                imf_func=kroupa_imf,
-                title="Discrete Grid Sampling (Kroupa)",
-                filename="diag_kroupa_discrete.png",
-                target_mass=500.0
-            )
-
-            unique_discrete = len(np.unique(masses_discrete))
-            print(f"\n  {len(masses_discrete)} stars, {unique_discrete} unique grid masses")
-            print(f"  Total mass: {np.sum(masses_discrete):.2f} Msun (target: 500.0)")
-
-        else:
-            print(f"  Database not found at: {database_path}")
-            print("  Run: python execute_stochastic_examples.py --quick")
-            print("  to generate database first")
-
-    except Exception as e:
-        print(f"  Could not run discrete example: {e}")
-        print("  (This is expected if database doesn't exist yet)")
+    from toddlers.pysb99.stochastic.population import IMFSpec, draw_stop_after, generation_rng
+    m = draw_stop_after(IMFSpec('kroupa', 0.1, 100.0), 500.0, generation_rng(123, 0))
+    print(f"{len(m)} stars, {m.sum():.1f} Msun drawn (target 500.0), "
+          f"{np.sum(m >= 8)} above 8 Msun")

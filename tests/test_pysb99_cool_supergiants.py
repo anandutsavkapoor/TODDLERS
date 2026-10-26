@@ -1,11 +1,10 @@
 """pySB99 spectral assignment: large, cool stars keep their light.
 
-Regression test for the cool-supergiant branch of
-``StellarPopulationSynthesis._assign_spectra_to_grid_WR``. Stars with
-log Teff < 3.65 above the WR minimum mass used to receive no spectrum, so
-the list of assigned spectra was shorter than the list of stars and every
-later star was paired with the wrong N(M) and radius. They now take a
-Lejeune (low-mass library) spectrum, as Starburst99 does.
+Contract of the cool-supergiant branch of
+``StellarPopulationSynthesis._assign_spectra_to_grid_WR``: stars with
+log Teff < 3.65 above the WR minimum mass take a Lejeune (low-mass library)
+spectrum, as Starburst99 does, so the list of assigned spectra matches the
+list of stars one to one and every star keeps its own N(M) and radius.
 
 Check, for a Z = 0.014 Kroupa (0.1-100 Msun) population at 5.5 Myr, where
 large, cool stars are present:
@@ -13,8 +12,7 @@ large, cool stars are present:
 - the integrated population luminosity equals sum_i N_i L_i to within the
   constant offset of -0.0063 dex seen at ages without cool supergiants
   (pySB99's radius formula implies L_sun = 3.784e33 erg/s, against
-  3.839e33 used here). Tolerance 0.0005 dex. Before the fix this age gives
-  -0.0647 dex.
+  3.839e33 used here). Tolerance 0.0005 dex.
 
 Also covers the library guards: WM-basic raises where its grid is missing,
 and IZw18 warns that its WR spectra are copies of the Z = 0.020 grid.

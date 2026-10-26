@@ -30,13 +30,14 @@ module load @PYTHON_MODULE@
 @ACTIVATE_ENV@
 export PYTHONPATH=@TODDLERS_SRC@:${PYTHONPATH:-}
 export TODDLERS_DATA=@TODDLERS_DATA@
-# Base dir for cloudy_output/ (empty -> package default). Keeps the large Cloudy output off the
-# install/home filesystem when set to scratch; the interpolant build reads the same root.
+# Output root (empty -> package default). The Cloudy stage writes cloudy_output/ next to the
+# evolution_output/ that holds the .dat it reads; this root is the fallback, so give it the
+# value used for the evolution stage (scratch for large runs).
 export TODDLERS_OUTPUT_ROOT=@OUTPUT_ROOT@
 
 # Cloudy: keep intermediates in node RAM, and pass the cluster's cloudy.exe.
 export TMPDIR=/dev/shm
-export CLOUDY_EXE=@CLOUDY_EXE@        # e.g. /data/gent/436/vsc43602/cloudy/source/cloudy.exe
+export CLOUDY_EXE=@CLOUDY_EXE@        # e.g. /path/to/cloudy/source/cloudy.exe
 # Small-to-large grain mass ratio for the Cloudy grain distribution. Empty -> package default
 # (0.10, Orion-like, the v2 value); the campaign sets 0.40 (ISM-like) for the v2 f_dust grid.
 export TODDLERS_SMALL_TO_LARGE_RATIO=@SMALL_TO_LARGE_RATIO@

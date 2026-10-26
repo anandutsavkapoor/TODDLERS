@@ -1,10 +1,10 @@
-"""Deterministic shell evolution (needs feedback data).
+"""Deterministic shell evolution (shipped feedback tables).
 
 Runs a single TODDLERS shell evolution for a uniform cloud with an SB99 population,
 and plots the shell radius and ionizing-photon-rate histories. This is the cheap first
 stage of the pipeline (no Cloudy).
 
-Requires the feedback library: `python scripts/download_data.py`.
+No download needed: the feedback tables ship with the package.
 """
 import os
 

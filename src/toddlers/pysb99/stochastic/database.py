@@ -56,7 +56,8 @@ try:
         StellarPopulationConfig,
         run_population_synthesis,
         StellarPopulationResults,
-        StellarDataLoader
+        StellarDataLoader,
+        SN_ENERGY_ERG, SN_MASS_MIN, SN_MASS_MAX, SN_REMNANT_MASS,
     )
 except ImportError:
     # Fall back to adding parent directory to path (when run as standalone script)
@@ -68,7 +69,8 @@ except ImportError:
         StellarPopulationConfig,
         run_population_synthesis,
         StellarPopulationResults,
-        StellarDataLoader
+        StellarDataLoader,
+        SN_ENERGY_ERG, SN_MASS_MIN, SN_MASS_MAX, SN_REMNANT_MASS,
     )
 
 # Metallicity mapping from pysb99 string identifiers to numerical Z values
@@ -246,6 +248,13 @@ def generate_single_star_database(
                 flux_spectra      [10^-20 erg/s/Angstrom, LINEAR not log] - single star
                                   To convert to log10(CGS): log10(flux_spectra) + 20
                                   Shape: (n_times, n_wavelengths)
+                attrs: the star's supernova (see _supernova_attrs): sn_fate,
+                t_death_myr, M_initial_msun, M_final_msun, M_rem_msun, sn_energy_erg,
+                sn_ejecta_mass_msun, sn_momentum_gcms
+
+    wind_power and wind_momentum are the stellar winds only. A supernova is an
+    instantaneous event, so it is stored as attributes, not sampled onto the time grid;
+    compute_time_delayed_feedback adds it at each star's death time.
     """
     if metallicities is None:
         metallicities = DEFAULT_METALLICITIES
@@ -301,6 +310,17 @@ def generate_single_star_database(
         meta.attrs['flux_spectra_units'] = '10^-20 erg/s/Angstrom (LINEAR, not log) - to convert to log10(CGS): log10(flux_spectra) + 20'
         meta.attrs['wavelength_units'] = 'Angstrom'
         meta.attrs['IMPORTANT'] = 'flux_spectra is the ONLY quantity stored in LINEAR (not log) form'
+        # Supernova constants (per-star SN events are attributes of each mass group)
+        meta.attrs['pysb99_sn_version'] = 2   # = generate_pysb99_interpolants.PYSB99_SN_VERSION (PCHIP death times)
+        meta.attrs['sn_energy_erg'] = SN_ENERGY_ERG
+        meta.attrs['sn_mass_min_msun'] = SN_MASS_MIN
+        meta.attrs['sn_mass_max_msun'] = SN_MASS_MAX
+        meta.attrs['sn_above_max'] = 'direct_collapse'
+        meta.attrs['sn_remnant_mass_msun'] = SN_REMNANT_MASS
+        meta.attrs['sn_ejecta_convention'] = 'M_final_minus_M_rem'
+        meta.attrs['sn_momentum_convention'] = 'sqrt(2 E_SN M_ej) per SN'
+        meta.attrs['sn_note'] = ('wind_power/wind_momentum are winds only; each mass group '
+                                 'holds its SN as attributes (sn_fate, t_death_myr, ...)')
         
         # === Process each metallicity ===
         for i_met, metallicity in enumerate(metallicities):
@@ -398,6 +418,7 @@ def generate_single_star_database(
                     # Store feedback quantities
                     for key, value in feedback.items():
                         mass_group.create_dataset(key, data=value)
+                    mass_group.attrs.update(_supernova_attrs(results, time_max_myr))
                     
                     if verbose:
                         print("*")
@@ -409,12 +430,113 @@ def generate_single_star_database(
             
             if verbose:
                 print()
-    
+
+    align_single_star_schema(output_file)
+
     if verbose:
         file_size_mb = os.path.getsize(output_file) / (1024**2)
         print("="*80)
         print(f"Complete: {output_file} ({file_size_mb:.1f} MB)")
         print("="*80)
+
+
+# ---------------------------------------------------------------------------
+# Aligned schema (toddlers.single_star_library, version 1)
+# ---------------------------------------------------------------------------
+SINGLE_STAR_SCHEMA = 'toddlers.single_star_library'
+SINGLE_STAR_SCHEMA_VERSION = 1
+#: dataset -> astropy unit string; values per star, log10 except flux_spectra
+SINGLE_STAR_UNITS = {
+    'wind_power': 'dex(erg s-1)', 'wind_momentum': 'dex(dyn)', 'L_bol': 'dex(erg s-1)',
+    'Q_HI': 'dex(s-1)', 'Q_HeI': 'dex(s-1)', 'Q_HeII': 'dex(s-1)',
+    'L_ion_HI': 'dex(erg s-1)', 'L_ion_HeI': 'dex(erg s-1)', 'L_ion_HeII': 'dex(erg s-1)',
+    'L_LyW': 'dex(erg s-1 Angstrom-1)', 'flux_spectra': '1e20 erg s-1 Angstrom-1',
+    'wavelength_grid': 'Angstrom', 'time_grid': 'Myr', 'mass_grid': 'Msun',
+}
+#: unified feedback-table name -> dataset (hard links next to the database's own names)
+SINGLE_STAR_SCHEMA_NAMES = {'L_mech_wind': 'wind_power', 'F_ram_wind': 'wind_momentum', 'L_ion': 'L_ion_HI'}
+#: units of the per-star attributes of each mass group
+SINGLE_STAR_ATTRIBUTE_UNITS = {
+    'mass_Msun': 'Msun', 'requested_mass_Msun': 'Msun', 'M_initial_msun': 'Msun', 'M_final_msun': 'Msun',
+    'M_rem_msun': 'Msun', 't_death_myr': 'Myr', 'sn_energy_erg': 'erg', 'sn_ejecta_mass_msun': 'Msun',
+    'sn_momentum_gcms': 'g cm s-1', 'sn_fate': '',
+}
+
+
+def align_single_star_schema(path):
+    """Add the aligned schema to a single-star database in place, without changing any value:
+    root attributes ``schema``, ``schema_version``, ``attribute_units`` (JSON), ``schema_names``
+    (JSON), a ``units`` attribute on every dataset, and the unified quantity names as hard links
+    (L_mech_wind -> wind_power, F_ram_wind -> wind_momentum, L_ion -> L_ion_HI). Idempotent."""
+    import json
+    with h5py.File(path, 'a') as f:
+        def visit(name, obj):
+            if isinstance(obj, h5py.Dataset):
+                base = name.split('/')[-1]
+                base = SINGLE_STAR_SCHEMA_NAMES.get(base, base)
+                if base not in SINGLE_STAR_UNITS:
+                    raise ValueError(f"{path}: dataset {name} has no schema unit")
+                obj.attrs['units'] = SINGLE_STAR_UNITS[base]
+        f.visititems(visit)
+        for zk in f:
+            if not zk.startswith('Z_'):
+                continue
+            for mk in f[zk]:
+                g = f[zk][mk]
+                if not mk.startswith('mass_') or not isinstance(g, h5py.Group):
+                    continue
+                for new, old in SINGLE_STAR_SCHEMA_NAMES.items():
+                    if old in g and new not in g:
+                        g[new] = g[old]
+        f.attrs['schema'] = SINGLE_STAR_SCHEMA
+        f.attrs['schema_version'] = SINGLE_STAR_SCHEMA_VERSION
+        f.attrs['attribute_units'] = json.dumps(SINGLE_STAR_ATTRIBUTE_UNITS, sort_keys=True)
+        f.attrs['schema_names'] = json.dumps(SINGLE_STAR_SCHEMA_NAMES, sort_keys=True)
+        f.attrs['values'] = 'per star; log10 except flux_spectra (linear, 1e20 erg s-1 Angstrom-1: value x 1e20 = erg/s/A)'
+
+
+def convert_single_star_database(src, dst):
+    """Copy a single-star database to ``dst`` and add the aligned schema to the copy (the
+    source is never modified). Returns dst."""
+    import shutil
+    if os.path.abspath(src) == os.path.abspath(dst):
+        raise ValueError("convert to a new file; the source is not modified")
+    shutil.copyfile(src, dst)
+    align_single_star_schema(dst)
+    return dst
+
+
+def _supernova_attrs(results: StellarPopulationResults, time_max_myr: float) -> Dict:
+    """The SN event of a single-star run, as HDF5 attributes.
+
+    sn_fate is 'ccSN' (explodes within the database time range), 'alive_at_tmax'
+    (in the SN mass window but dies after time_max_myr), 'direct_collapse' (above
+    the SN window) or 'no_SN_below_cut'. t_death_myr is the end of the star's track in
+    every case.
+    """
+    ev = results.supernova_events
+    k = int(np.nonzero(ev['n_stars'] > 0)[0][0])
+    m_ini = float(ev['initial_mass'][k])
+    t_d = float(ev['t_death_yr'][k]) / 1e6
+    explodes = bool(ev['explodes'][k])
+    if not explodes and m_ini > ev['sn_mass_max']:
+        fate = 'direct_collapse'
+    elif not explodes:
+        fate = 'no_SN_below_cut'
+    elif t_d > time_max_myr:
+        fate = 'alive_at_tmax'
+    else:
+        fate = 'ccSN'
+    return {
+        'sn_fate': fate,
+        't_death_myr': t_d,
+        'M_initial_msun': m_ini,
+        'M_final_msun': float(ev['final_mass'][k]),
+        'M_rem_msun': float(ev['sn_remnant_mass']) if explodes else 0.0,
+        'sn_energy_erg': float(ev['sn_energy_erg']) if explodes else 0.0,
+        'sn_ejecta_mass_msun': float(ev['ejecta_mass'][k]),
+        'sn_momentum_gcms': float(ev['momentum_per_sn'][k]),
+    }
 
 
 def _run_single_star(
@@ -661,7 +783,7 @@ def _query_single(
     -----
     - Caps mass/age at database limits (or raises error if strict_mass_limits=True)
     - Nearest neighbor in mass (optimized for discrete sampling on grid)
-    - Linear interpolation in age
+    - Linear interpolation in age of the linear quantity (returned as log10)
     """
     with h5py.File(hdf5_file, 'r') as f:
         
@@ -716,8 +838,10 @@ def _query_single(
         mass_group = Z_group[f'mass_{mass_nearest:.1f}']
         data = mass_group[quantity][:]
         
-        # Linear interpolation in age only
-        return np.interp(age_myr, time_grid, data)
+        # Linear interpolation in age of the LINEAR quantity (the database stores log10), the
+        # same convention as the spectrum lookup (_query_spectrum_single interpolates linear
+        # flux), so a star's feedback and its spectrum agree inside a steep 0.1 Myr interval.
+        return np.log10(np.interp(age_myr, time_grid, np.power(10.0, data)))
 
 
 def query_database(
@@ -945,6 +1069,45 @@ def query_spectrum(
         )
     
     return wavelength, flux_spectra
+
+
+def get_supernova_table(database_path: str, metallicity: str) -> Dict:
+    """Per-star SN properties of one metallicity, sorted by initial mass.
+
+    Returns a dict with arrays 'mass' (the group's mass_Msun), 't_death_myr' and
+    'M_final_msun', and the constants 'sn_energy_erg', 'sn_mass_min', 'sn_mass_max'
+    and 'sn_remnant_mass' from /metadata. Raises ValueError for a database that is not the
+    2.1.0 version; the message names how to get the 2.1.0
+    database (scripts/download_data.py --stochastic-tracks --overwrite, or a local build
+    with examples/build_stochastic_database.py).
+    """
+    Z_target = METALLICITY_MAPPING[metallicity]
+    with h5py.File(database_path, 'r') as f:
+        meta = f['metadata'].attrs
+        if 'sn_energy_erg' not in meta:
+            raise ValueError(
+                f"{database_path} is not the single-star database of this version: "
+                "stochastic runs in TODDLERS 2.1.0 need the 2.1.0 single-star database. Download "
+                "it with 'python scripts/download_data.py --stochastic-tracks --overwrite', or "
+                "build it locally with 'python examples/build_stochastic_database.py'.")
+        Zg = f[_find_nearest_Z_group(f, Z_target)]
+        rows = []
+        for key in Zg:
+            if not key.startswith('mass_') or not isinstance(Zg[key], h5py.Group):
+                continue   # the 'mass_grid' dataset is not a star
+            a = Zg[key].attrs
+            rows.append((float(a['mass_Msun']), float(a['t_death_myr']), float(a['M_final_msun'])))
+        table = {
+            'sn_energy_erg': float(meta['sn_energy_erg']),
+            'sn_mass_min': float(meta['sn_mass_min_msun']),
+            'sn_mass_max': float(meta['sn_mass_max_msun']),
+            'sn_remnant_mass': float(meta['sn_remnant_mass_msun']),
+        }
+    rows = np.array(sorted(set(rows)))
+    _, uniq = np.unique(rows[:, 0], return_index=True)
+    rows = rows[uniq]
+    table.update({'mass': rows[:, 0], 't_death_myr': rows[:, 1], 'M_final_msun': rows[:, 2]})
+    return table
 
 
 def _find_nearest_Z_group(f: h5py.File, Z_target: float) -> str:

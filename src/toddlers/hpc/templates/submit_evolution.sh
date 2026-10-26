@@ -10,7 +10,7 @@
 #     python -m toddlers.hpc.generate_tasks evolution --grid grid.json -o tasks
 # ---------------------------------------------------------------------------
 #SBATCH --job-name=tdl_evo
-#SBATCH --account=@ACCOUNT@            # e.g. starting_2026_035 (Tier-1) / gvo00053 (Tier-2)
+#SBATCH --account=@ACCOUNT@            # your project account
 #SBATCH --partition=@PARTITION@       # e.g. cpu_milan_rhel9 (Tier-1)
 #SBATCH --nodes=1
 #SBATCH --ntasks=@NTASKS@             # cores per node; portable form (NOT --ntasks-per-node)
@@ -34,7 +34,8 @@ export PYTHONPATH=@TODDLERS_SRC@:${PYTHONPATH:-}
 
 # Large data lives outside the package; point the resolver at it.
 export TODDLERS_DATA=@TODDLERS_DATA@
-# Base dir for cloudy_output/ (empty -> package default); set to scratch for large runs.
+# Root of evolution_output/, evolution_logs/ and cloudy_output/ (empty -> package default);
+# set to scratch for large runs.
 export TODDLERS_OUTPUT_ROOT=@OUTPUT_ROOT@
 
 # --- run -------------------------------------------------------------------

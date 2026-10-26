@@ -1,10 +1,10 @@
-"""Cloud density structure: uniform vs Bonnor-Ebert (needs feedback data).
+"""Cloud density structure: uniform vs Bonnor-Ebert (shipped feedback tables).
 
 The initial cloud structure controls how the shell sweeps up mass and when it
 fragments. Centrally concentrated (Bonnor-Ebert) clouds fragment earlier than uniform
 ones at fixed mass and mean density. This compares the shell evolution for each.
 
-Requires: `python scripts/download_data.py`.
+No download needed: the feedback tables ship with the package.
 """
 import os
 

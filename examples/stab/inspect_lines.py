@@ -14,7 +14,7 @@ from toddlers.constants import MYR_TO_SEC
 
 # Test parameters
 if len(sys.argv) < 2:
-    sys.exit("usage: python test_lines.py <cloudy_output_dir> [model] [time_Myr]\n"
+    sys.exit("usage: python inspect_lines.py <cloudy_output_dir> [model] [time_Myr]\n"
              "  <cloudy_output_dir>: a Cloudy model output directory "
              "(e.g. .../Z..._eta..._n..._logM.../)")
 base_path = sys.argv[1]

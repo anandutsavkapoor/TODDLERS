@@ -26,7 +26,24 @@ _EVOLUTION_PASSTHROUGH = (
     "Z", "eta_sf", "n_cl", "template", "imf", "star_type", "profile_type",
     "cluster_formation_mode", "formation_timescale", "f_dust",
     "dynamic_cloud_density", "add_cover_frac", "post_sweep_covering_fraction",
+    "stochastic",
 )
+
+
+def _check_stochastic(spec):
+    """A task's ``stochastic`` object holds StochasticSpec fields: "imf" ({"name", "m_low",
+    "m_up"}) and "base_seed" required, the rest optional (the database defaults to this
+    machine's get_database_path()). Other keys are refused, since the spec would drop them
+    silently."""
+    from dataclasses import fields
+    from ..pysb99.stochastic.population import StochasticSpec
+    if not isinstance(spec, dict):
+        raise ValueError(f"task 'stochastic' must be a JSON object (StochasticSpec fields), got "
+                         f"{type(spec).__name__}: {spec!r}")
+    allowed = [f.name for f in fields(StochasticSpec)]
+    unknown = sorted(set(spec) - set(allowed))
+    if unknown:
+        raise ValueError(f"task 'stochastic' has unknown keys {unknown}; allowed: {allowed}")
 
 
 def run_evolution_task(row: dict):
@@ -34,11 +51,16 @@ def run_evolution_task(row: dict):
 
     ``M_cl_init`` is expected in solar masses. A ``covering_fraction`` shortcut is
     honoured for backward compatibility (covering_fraction < 1 -> add_cover_frac).
-    Any other recognised Evolution keyword present in ``row`` is passed through.
+    Any other recognised Evolution keyword present in ``row`` is passed through, including
+    ``stochastic`` as a JSON object of StochasticSpec fields, e.g.
+    ``{"imf": {"name": "kroupa", "m_low": 0.1, "m_up": 100.0}, "base_seed": 23}`` (with
+    ``template`` "pySB99" and no ``imf``); unknown spec keys are refused.
     """
     from ..evolution import Evolution
 
     kwargs = {k: row[k] for k in _EVOLUTION_PASSTHROUGH if k in row}
+    if "stochastic" in kwargs:
+        _check_stochastic(kwargs["stochastic"])
 
     if "M_cl_init" in row:
         kwargs["M_cl_init"] = float(row["M_cl_init"]) * M_SUN
@@ -62,6 +84,31 @@ def run_evolution_task(row: dict):
 # unattenuated nebular continuum completes, so the worker log states up front whether
 # the binary carries the cloudy_patches/ patch (see the [patch-check] block below).
 _PATCH_CHECK_LOGGED = False
+
+
+def _patch_check(phase, neb_path, cloudy_exe=None):
+    """The one-time [patch-check] note of a worker, from its first shell or unified model
+    (the models whose inputs save the unattenuated continuum; a dissolved model writes no
+    .diffContUnatt and says nothing about the binary). Returns True if the check ran."""
+    global _PATCH_CHECK_LOGGED
+    if _PATCH_CHECK_LOGGED or phase not in ("shell", "unified"):
+        return False
+    _PATCH_CHECK_LOGGED = True
+    header = ""
+    if os.path.exists(neb_path):
+        with open(neb_path, errors="replace") as f:
+            header = f.readline()
+    if "DiffContUnatt" not in header:
+        exe = cloudy_exe or "cloudy.exe"
+        if os.path.exists(neb_path):
+            what = ("A stock Cloudy writes .diffContUnatt with its standard, attenuated diffuse "
+                    "continuum, so the noDust / variable-DTM SEDs use the attenuated one.")
+        else:
+            what = ("No .diffContUnatt was written, so the noDust / variable-DTM SEDs use the "
+                    "attenuated diffuse continuum.")
+        print(f"[patch-check] {exe} has no unattenuated-continuum patch (cloudy_patches/): "
+              f"the unattenuated diffuse continuum is NOT produced. {what}")
+    return True
 
 
 @contextmanager
@@ -210,23 +257,20 @@ def run_cloudy_task(row: dict, cloudy_exe: str = None):
                 f"empty output (truncated save / disk full?)")
 
         # One-time per worker: warn if this cloudy.exe lacks the unattenuated-continuum
-        # patch (cloudy_patches/). The shell/unified/dissolved inputs all request
-        # `save diffuse continuum unattenuated`; a patched binary writes a non-empty
-        # .diffContUnatt, an unpatched one writes nothing there and does NOT error.
-        # _outputs_valid() above does not require that file, so an unpatched binary
-        # "exits OK" yet produces no unattenuated nebular continuum. The patch is
-        # optional, so this is a one-time note (greppable as "[patch-check]"), not a
-        # failure: without it the noDust / variable-DTM SEDs fall back to the standard
-        # attenuated diffuse continuum.
-        global _PATCH_CHECK_LOGGED
-        if not _PATCH_CHECK_LOGGED and phase in ("shell", "unified", "dissolved"):
-            _PATCH_CHECK_LOGGED = True
-            neb_path = output_handler.get_file_path("diffContUnatt")
-            if not (os.path.exists(neb_path) and os.path.getsize(neb_path) > 0):
-                exe = cloudy_exe or "cloudy.exe"
-                print(f"[patch-check] {exe} has no unattenuated-continuum patch "
-                      f"(cloudy_patches/): no .diffContUnatt written, so noDust / "
-                      f"variable-DTM SEDs fall back to the attenuated diffuse continuum.")
+        # patch (cloudy_patches/). The shell and unified inputs request
+        # `save diffuse continuum unattenuated`. A stock Cloudy does not error on that
+        # command: its parser matches DIFF only and writes the standard diffuse
+        # continuum with the header '#energy/...\tConEmitLocal\t...' (Cloudy
+        # parse_save.cpp:738 at 013dc0bf and 01c4cfc6). So the file's presence says
+        # nothing; its header does: 'DiffContUnatt' in the first line = patched (the
+        # rule the reader, CloudyOutputHandler.get_nebular_continuum_unatt, applies).
+        # The patch is optional, so this is a one-time note (greppable as
+        # "[patch-check]"), not a failure: without it the unattenuated diffuse continuum
+        # is not produced and the noDust / variable-DTM SEDs use the standard, attenuated
+        # diffuse continuum.
+        # Only shell and unified models write the file (a dissolved model writes none), so
+        # the check waits for the first of those, however many dissolved models come first.
+        _patch_check(phase, output_handler.get_file_path("diffContUnatt"), cloudy_exe)
 
     info = f"{phase}@{time / MYR_TO_SEC:.3f}Myr"
     if repairs:

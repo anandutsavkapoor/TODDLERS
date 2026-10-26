@@ -507,8 +507,12 @@ class EEPFeedbackInterpolator:
         return dict(a_lo=a_lo, a_hi=a_hi, lo=lo, hi=hi)
 
     def _snap(self, mass, ages):
+        """Nearest grid track, interpolated linearly in age in LINEAR space (returned as
+        log10), the convention of stochastic.database.query_database and of the spectrum
+        lookup."""
         i = int(np.argmin(np.abs(self._db_masses - mass)))
-        return {q: np.interp(ages, self.age_grid, self._fb[q][i]) for q in self.quantities}
+        return {q: np.log10(np.interp(ages, self.age_grid, np.power(10.0, self._fb[q][i])))
+                for q in self.quantities}
 
     def query(self, mass, ages_myr):
         """log10 feedback for a (possibly off-grid) mass at the given ages [Myr]."""

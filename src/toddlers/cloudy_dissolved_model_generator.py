@@ -1,5 +1,6 @@
 from .imports import np
 from .constants import *
+from ._fileutils import atomic_text_write
 
 class DissolvedModelGenerator:
     """
@@ -94,7 +95,7 @@ class DissolvedModelGenerator:
         """
         file_path = f"{self.model_prefix}_{t/MYR_TO_SEC:.2f}.in"
         
-        with open(file_path, 'w') as f:
+        with atomic_text_write(file_path) as f:   # a reader never sees a partial .in
             f.write(f"# Dissolved model (direct stellar spectrum) at t = {t/MYR_TO_SEC:.2f} Myr\n")
             
             for option in self.get_source_options(t):

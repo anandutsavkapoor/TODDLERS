@@ -1,24 +1,83 @@
 from .timeout_manager import TimeoutManager, LogStallWatchdog
 from .imports import np, solve_ivp, interp1d, brentq, sys, os, contextmanager, warnings, traceback, pickle
 from .constants import *
-from .exceptions import ManualEventTermination, capture_output
+from .exceptions import ManualEventTermination, ConfigurationError, capture_output
 from .evolution_logging import EvolutionLogger, NullEvolutionLogger
 from .evolution_data import EvolutionState
 from .initial_conditions import InitialConditions
-from .stellar_feedback import StellarFeedback
+from .stellar_feedback import StellarFeedback, feedback_table_md5, refuse_legacy_pre_drawn_name
+import glob
+import json
+import platform
+import time
+from ._provenance import code_provenance
+from . import evolution_logging
 from .cloud_density_profiles import create_density_profile, UniformDensityWithCavity
 from .cloud_energy_injection import CloudEnergyInjection
 from .shell_structure import ShellStructure
 from .lyman_alpha import LymanAlpha
 from .phase1 import Phase1
 from .fragmentation import Fragmentation
-from .utils import f_dust_label
+from .utils import f_dust_label, resolve_output_root, to_plain
 from .phase2 import Phase2
 from .dissolution import Dissolution
 from .track_simulation import TrackSimulation
 from .utils import format_value, func_tanh_extPressure_velocity, func_tanh_extPressure_fesc_ion, \
     func_tanh_sweep_coverfrac, func_tanh_infall_coverfrac, get_atols, calculate_cloud_escape_fraction, process_buffers, \
     get_shell_inner_face_density
+
+# Bump when the evolution code changes the track computed for unchanged inputs; cached
+# tracks recorded with another version are then recomputed.
+# The current version (2) reads supernova point events linearly in t.
+TRACK_CODE_VERSION = 2
+
+
+def _solve_line(name, t_span, y0, atols, rtol):
+    """One log line for a solve_ivp call: span in Myr, rtol, initial state and atol (cgs)."""
+    vec = lambda v: "[" + ", ".join(f"{float(x):.4e}" for x in np.ravel(v)) + "]"
+    return (f"solving {name}: t {t_span[0] / MYR_TO_SEC:.4f} -> {t_span[1] / MYR_TO_SEC:.2f} Myr, "
+            f"rtol {rtol:g}, y0 {vec(y0)}, atol {vec(atols)} (cgs)")
+
+
+def cached_output_status(path, feedback_md5, inputs=None):
+    """State of the cached .dat at path:
+
+    * 'current': computed with these feedback tables, this TRACK_CODE_VERSION and (when
+      given) these exact inputs (the .dat ``inputs`` record);
+    * 'stale': it records other tables, code or inputs, it cannot be read (a truncated or
+      corrupt file), or it is a pySB99 track without the fingerprint (its pySB99 table
+      cannot be identified);
+    * 'legacy': an SB99 or BPASS track without the fingerprint (made from the same shipped
+      tables; reused with a warning).
+    """
+    try:
+        with open(path) as f:
+            params = json.load(f).get('parameters', {})
+    except (ValueError, UnicodeDecodeError):
+        return 'stale'
+    if 'feedback_md5' not in params:
+        return 'stale' if params.get('template') == 'pySB99' else 'legacy'
+    if params['feedback_md5'] != feedback_md5 or params.get('track_code_version') != TRACK_CODE_VERSION:
+        return 'stale'
+    if inputs is not None and params.get('inputs') != json.loads(json.dumps(inputs)):
+        return 'stale'
+    return 'current'
+
+
+def move_output_aside(path):
+    """Move a cached .dat and its side files (.summary, _stars.npz, _gen<i>_feedback.h5) into
+    stale/<UTC time>/ next to it; never delete."""
+    from datetime import datetime, timezone
+    stamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S_%fZ')
+    dest = os.path.join(os.path.dirname(path), 'stale', stamp)
+    os.makedirs(dest, exist_ok=True)
+    stem = path[:-len('.dat')]
+    side = [stem + '.summary', stem + '_stars.npz'] + sorted(glob.glob(stem + '_gen*_feedback.h5'))
+    for p in [path] + side:
+        if os.path.exists(p):
+            os.replace(p, os.path.join(dest, os.path.basename(p)))
+    return dest
+
 
 class Evolution:
     """
@@ -76,16 +135,19 @@ class Evolution:
                 post_sweep_covering_fraction=COVERING_FRACTION_DEF, dark_matter_fraction=0.0,
                 use_Tion_model=False, skip_logger_init=False, init_with_fragmentation=False,
                 include_gravity=True, include_lyman_alpha=True,
-                include_external_pressure=True, f_dust=1.0):
+                include_external_pressure=True, f_dust=1.0, stochastic=None,
+                save_generation_tables=True, output_root=None):
         """
         Initialize the Evolution object.
 
         Args:
-            Z (float): Metallicity of the gas, in solar units.
+            Z (float): Metallicity of the gas as a mass fraction (e.g. 0.014 or 0.02),
+                not in solar units.
             eta_sf (float): Star formation efficiency.
             n_cl (float): Mean cloud number density, in cm^-3.
             M_cl_init (float): Initial cloud mass, in grams.
-            template (str): Stellar population synthesis model template ('BPASS_100', 'SB99_100', etc.).
+            template (str): Stellar population template: 'BPASS', 'SB99', 'pySB99', or any name a
+                unified feedback table was written under (toddlers.feedback_tables; imf= required).
             cluster_formation_mode (str, optional): Mode of star cluster formation ('burst' or 'constant_sfr'). 
                 Defaults to 'burst'.
             formation_timescale (float, optional): Timescale for star formation in 'constant_sfr' mode, in seconds. 
@@ -94,9 +156,8 @@ class Evolution:
             profile_params (dict, optional): Additional parameters for the density profile. Defaults to None.
             dynamic_cloud_density (bool, optional): Whether to dynamically update the cloud density. 
                 Defaults to False.
-            imf (str, optional): Initial Mass Function to use. Options depend on the template.
-                For BPASS: 'chab100' (default), 'chab300'
-                For SB99: 'kroupa100' (default), 'kroupa120', 'kroupa120_rot'
+            imf (str, optional): IMF name of the feedback table. BPASS: 'chab100' (default),
+                'chab300'; SB99: 'kroupa100' (default); pySB99 and other templates: required.
             star_type (str, optional): For BPASS models, specifies 'sin' (single) or 'bin' (binary) stars.
                 Defaults to 'bin' for BPASS. Not used for other templates.
             add_cover_frac (bool, optional): If True, applies a covering fraction to radiation and ram forces 
@@ -108,7 +169,9 @@ class Evolution:
                 only contributes to gravitational force and remains constant through generations. Defaults to 0.0
             use_Tion_model (bool): If True, uses metallicity, density, and ionization flux dependent
                 temperature is used in ionized shell structure eqns instead of 1e4K. Defaults to False.
-                This makes use of Cloudy single zone models with T_ion = f(n, Z, ionizing_flux).
+                This makes use of Cloudy single zone models with T_ion = f(n, Z, ionizing_flux),
+                tabulated in database/Hii_temperature_interpolator.obj (Z as a mass fraction,
+                0.001-0.04; see utils.get_shell_inner_face_density).
             skip_logger_init (bool, optional): Whether to open a new log instance, useful for simulations needing
                 multiple attempts.
             init_with_fragmentation (bool, optional): Whether to initialize the simulation directly
@@ -119,13 +182,31 @@ class Evolution:
                 pressure contribution. UV+IR radiation is unaffected.
             include_external_pressure (bool, optional): If False, disables the external
                 cloud/ISM pressure force on the shell.
-            f_dust (float, optional): Dust-to-metal mass ratio normalized to solar.
+            f_dust (float, optional): Grain abundance scaling factor (1.0 = the released dust content).
                 Scales sigma_dust, kappa_IR, and Lyman-alpha dust opacity. Defaults to 1.0.
+            stochastic (StochasticSpec or dict, optional): template 'pySB99' with imf=None only.
+                Every generation draws its own stars from the IMF named in the spec, over its
+                full range, with a stream derived from (spec.base_seed, generation); see
+                toddlers.pysb99.stochastic.population. Each generation's star list is saved with
+                the output (inline below 1e4 stars, and in a _stars.npz next to the .dat).
+            save_generation_tables (bool, optional): stochastic runs only. If True (default), each
+                generation's feedback table is written next to the output as
+                ``<output stem>_gen<i>_feedback.h5`` (read with toddlers.feedback_tables.load_table
+                or load_run_generations); if False, the tables can be rebuilt from the saved star
+                lists. The star lists are saved either way. A run reused from the cache with True
+                gets the tables it is missing, rebuilt from its recorded star lists.
 
         Raises:
             NotImplementedError: If dynamic cloud density is used with a non-uniform profile.
             ValueError: If an unsupported template or invalid star_type is provided.
-        """                
+        """
+        # Every constructor argument, so a retry (cleanup_after_attempt) rebuilds the
+        # object exactly; must stay the first statement, before any other local exists.
+        self._init_kwargs = {k: v for k, v in locals().items() if k != 'self'}
+        # RHS calls and wall time between RHS calls, by phase (this attempt; for the run record)
+        self._rhs_calls = {p: 0 for p in ('phase1', 'fragmentation', 'phase2', 'dissolution')}
+        self._phase_wall = {p: 0.0 for p in self._rhs_calls}
+        self._last_rhs_wall = None
         self.Z = Z
         self.eta_sf = eta_sf
         self.n_cl = n_cl
@@ -158,14 +239,33 @@ class Evolution:
         elif self.template.startswith('SB99'):
             self.imf = imf or "kroupa100"
             self.star_type = star_type or "sin" 
+        elif self.template == 'pySB99' and stochastic is not None:
+            from .pysb99.stochastic.population import StochasticSpec
+            if imf is not None:
+                raise ValueError("With stochastic=..., pass imf=None: the IMF is named in the stochastic spec")
+            stochastic = StochasticSpec.coerce(stochastic)
+            self.imf = stochastic.label
+            self.star_type = star_type or "sin"
         elif self.template == 'pySB99':
             # pySB99 supports custom IMFs, no default
             if imf is None:
                 raise ValueError("IMF must be specified for pySB99 template")
+            refuse_legacy_pre_drawn_name(self.template, imf)   # before any file, dir or log
             self.imf = imf
             self.star_type = star_type or "sin"
         else:
-            raise ValueError(f"Unsupported template: {self.template}")
+            # any template whose unified feedback table exists (routing by the table and its
+            # metadata, not by the name); StellarFeedback reads and checks it
+            if imf is None:
+                raise ValueError(f"Unsupported template: {self.template}. Built-in templates are "
+                                 f"'BPASS', 'SB99', 'pySB99'; any other needs imf= and a table "
+                                 f"written by toddlers.feedback_tables.")
+            self.imf = imf
+            self.star_type = star_type
+        if stochastic is not None and self.template != 'pySB99':
+            raise ValueError("stochastic populations need template='pySB99'")
+        self.stochastic = stochastic
+        self.save_generation_tables = bool(save_generation_tables)
 
         # set fix or variable temp in shell structure equations
         self.use_Tion_model = use_Tion_model
@@ -178,48 +278,41 @@ class Evolution:
         self.profile_type = profile_type
         self.profile_params = profile_params if profile_params else {}
         self.dynamic_cloud_density = dynamic_cloud_density
+        # absolute now, so the paths and the logged root do not depend on a later cwd change
+        self.output_root = os.path.abspath(output_root) if output_root else None
+        self._init_kwargs['output_root'] = self.output_root       # a retry rebuilds with the same root
         
         # once all parameters have been defined
         self.ensure_output_directories()
         self.output_path, self.log_path = self.get_output_paths()
 
+        if self.stochastic is not None:
+            self.feedback_md5 = self.stochastic.fingerprint()
+        else:
+            self.feedback_md5 = feedback_table_md5(self.template, self.imf, self.star_type)
         if os.path.exists(self.output_path):
-            print(f"The simulation result file '{self.output_path}' already exists.")
-            self._output_exists = True
-            return
+            status = cached_output_status(self.output_path, self.feedback_md5, self._inputs_record())
+            if status == 'stale':
+                moved = move_output_aside(self.output_path)
+                print(f"The simulation result file '{self.output_path}' was computed with other "
+                      f"feedback tables or code; moved it to {moved} and running again.")
+            else:
+                if status == 'legacy':
+                    print(f"Warning: '{self.output_path}' records no feedback-table fingerprint "
+                          f"(written before 2.1.0); reusing it as is.")
+                else:
+                    print(f"The simulation result file '{self.output_path}' already exists.")
+                self._output_exists = True
+                if self.stochastic is not None and self.save_generation_tables:
+                    self._write_cached_generation_tables()
+                return
 
         if not skip_logger_init:
             self.logger = EvolutionLogger(self.log_path)
-            self.logger.info(f"Initializing Evolution with Z={Z}, eta_sf={eta_sf}, n_cl={n_cl} cm^-3, M_cl_init={M_cl_init/M_SUN:.2e} M_sun")
+            self._log_run_header()
         else:
             self.logger = NullEvolutionLogger()
 
-        self.logger.info(f"Feedback template is: {self.template}")
-        self.logger.info(f"IMF: {self.imf}")
-        self.logger.info(f"Star type: {self.star_type}")
-        self.logger.info(f"Cluster formation mode is: {self.cluster_formation_mode}")
-        if self.cluster_formation_mode == 'constant_sfr':
-            self.logger.info(f"Cluster formation timescale is: {self.formation_timescale/MYR_TO_SEC:.2f} Myr")
-        self.logger.info(f"Covering fraction in acceleration calculations is {'enabled' if self.add_cover_frac else 'disabled'}")
-        if self.add_cover_frac:
-            self.logger.info(f"Post sweep value covering fraction value is: {self.post_sweep_covering_fraction}")
-        if self.dark_matter_fraction > 0:
-            self.logger.info(f"Dark matter component enabled with fraction: {self.dark_matter_fraction:.3f}")
-            self.logger.info(f"Dark matter mass: {self.M_dm/M_SUN:.2e} M_sun")
-        if self.use_Tion_model:
-            self.logger.info(f"Variable ionized gas temperature for shell structure is enabled. Uses precalculated Cloudy interpolator.")
-        else:
-            self.logger.info(f"Variable ionized gas temperature for shell structure is disabled.")
-        if not self.include_gravity:
-            self.logger.info("Gravitational force is DISABLED")
-        if not self.include_lyman_alpha:
-            self.logger.info("Lyman-alpha radiation force is DISABLED")
-        if not self.include_external_pressure:
-            self.logger.info("External pressure force is DISABLED")
-        if self.f_dust != 1.0:
-            self.logger.info(f"Dust-to-metal ratio (scaled by solar): {self.f_dust:.2f}")
-        if self.init_with_fragmentation:
-            self.logger.info("SIMULATION CONFIGURED TO START DIRECTLY IN FRAGMENTATION PHASE")
 
         self.state = EvolutionState()
         self.phase1 = Phase1(self)
@@ -230,7 +323,8 @@ class Evolution:
         self.stellar_feedback = StellarFeedback(
             template, Z, M_cl_init, eta_sf, self.state.t_list_collapse,
             mode=cluster_formation_mode, formation_timescale=formation_timescale,
-            imf=self.imf, star_type=self.star_type
+            imf=None if self.stochastic is not None else self.imf, star_type=self.star_type,
+            stochastic=self.stochastic
         )
         
         self.lyman_alpha = LymanAlpha(Z, T_NEUTRAL, f_dust=self.f_dust)
@@ -243,12 +337,12 @@ class Evolution:
         else:
             self.dt_calc_dynamic_cloud = 1 / (ALPHA_B * self.density_profile.n_avg)
             self.kinetic_energy_efficiency = ETA_KE
-            self.logger.info(f"Cloud dynamic density is : {self.dynamic_cloud_density}")
+        self._log_physics()
+        self.logger.log_profile_info(self.density_profile)
 
         self.t0 = T_INIT_TEMPLATE # first gen
         self.y0 = self.get_initial_conditions(self.t0, dt=T_INIT_TEMPLATE) # dt is the period of w77 expansion
 
-        self.logger.log_profile_info(self.density_profile)
         self.shell_structure = None
         self.all_results = []
         self.tracker = TrackSimulation()
@@ -262,22 +356,16 @@ class Evolution:
         Returns:
             tuple: (output_path, log_path)
         """
-        # Get the directory of evolution.py
-        evolution_dir = os.path.dirname(os.path.abspath(__file__))
-        
-        # Go up one level to the parent directory
-        parent_dir = os.path.dirname(evolution_dir)
-        
-        # Create directory structure
-        dir_path = os.path.join(
-            parent_dir, 
-            EVOLUTION_OUTPUT_DIR,  # Changed from 'results'
-            f"template_{self.template}", 
-            f"imf_{self.imf}", 
-            f"star_type_{self.star_type}", 
-            f"cluster_mode_{self.cluster_formation_mode}", 
+        root = self._output_root()
+        self.resolved_output_root = os.path.abspath(root)
+        layout = os.path.join(
+            f"template_{self.template}",
+            f"imf_{self.imf}",
+            f"star_type_{self.star_type}",
+            f"cluster_mode_{self.cluster_formation_mode}",
             f"profile_type_{self.profile_type}"
         )
+        dir_path = os.path.join(root, EVOLUTION_OUTPUT_DIR, layout)
         
         # Create filename
         filename = f'sim_Z{self.Z:.3g}_eta{self.eta_sf:.3g}_n{self.n_cl:.1f}_logM{np.log10(self.M_cl_init/M_SUN):.2f}'
@@ -290,16 +378,24 @@ class Evolution:
         if self.cluster_formation_mode == 'constant_sfr':
             filename += f'_tform{self.formation_timescale/MYR_TO_SEC:.1f}'
         filename += f_dust_label(self.f_dust)
+        if self.stochastic is not None:
+            filename += f'_seed{self.stochastic.base_seed}'
 
         filename += '.dat'
         
         # Create full path
         full_path = os.path.join(dir_path, filename)
         
-        # Create log path - now using EVOLUTION_LOGS_DIR instead of 'logs'
-        log_path = full_path.replace(EVOLUTION_OUTPUT_DIR, EVOLUTION_LOGS_DIR).replace('.dat', '.log')
+        log_path = os.path.join(root, EVOLUTION_LOGS_DIR, layout, filename[:-len('.dat')] + '.log')
         
         return full_path, log_path
+
+    def _output_root(self):
+        """The output root: the output_root argument, else $TODDLERS_OUTPUT_ROOT, else the
+        package's parent directory (the default). Recorded in the .dat (`output_root`), so
+        the Cloudy stage of this run writes under the same root."""
+        default_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        return self.output_root or resolve_output_root(default_root)
 
     def ensure_output_directories(self):
         """
@@ -372,12 +468,12 @@ class Evolution:
 
 
         self.logger.info(
-            f"Initial conditions: t0={format_value(t0 / MYR_TO_SEC, '.2f')} Myr, "
-            f"R0={format_value(R0 / PC_TO_CM, '.2f')} pc, "
-            f"V0={format_value(V0 / KM_TO_CM, '.2f')} km/s, "
-            f"E0={format_value(E0, '.2e')} erg, "
-            f"M_sh={format_value(self.state.M_sh / M_SUN, '.2e')} M_sun, "
-            f"n_cloud_avg_0 (same as model average density)={format_value(self.state.n_cloud_avg, '.2e')} cm^-3"
+            f"initial conditions  t0 {format_value(t0 / MYR_TO_SEC, '.2f')} Myr  |  "
+            f"R0 {format_value(R0 / PC_TO_CM, '.2f')} pc  |  "
+            f"V0 {format_value(V0 / KM_TO_CM, '.2f')} km/s  |  "
+            f"E0 {format_value(E0, '.2e')} erg  |  "
+            f"M_sh {format_value(self.state.M_sh / M_SUN, '.2e')} M_sun  |  "
+            f"n_cloud {format_value(self.state.n_cloud_avg, '.2e')} cm^-3 (the cloud mean)"
         )
 
         return np.array([R0, V0, E0, self.state.M_sh, self.state.n_cloud_avg])
@@ -393,7 +489,6 @@ class Evolution:
         )
         self.R_cl = self.density_profile.R_cl
         self.R_cl_init = self.R_cl
-        self.logger.info(f"Cloud radius is: R_cl={self.R_cl/PC_TO_CM}")
 
     def check_early_fragmentation(self):
         """
@@ -503,6 +598,7 @@ class Evolution:
         try:
 
             generation_results = {}
+            self._log_generation(0)
             while self.state.t_end <= MAX_SIMULATION_TIME:
 
                 if self.state.phase == 'phase1':
@@ -514,7 +610,7 @@ class Evolution:
                     
                     t_span = (self.t0, MAX_SIMULATION_TIME)
                     atols = get_atols(self.y0[0], self.y0[2], phase=self.state.phase, dynamic_cloud_density=self.dynamic_cloud_density)
-                    self.logger.debug(f"Solving IVP for Phase 1: t_span={t_span}, y0={self.y0}, atols={atols}, rtol={RTOL_MAIN_PH1}")
+                    self.logger.debug(_solve_line("phase 1", t_span, self.y0, atols, RTOL_MAIN_PH1))
                     
                     termination_identifier = None
                     with capture_output() as get_buffers:
@@ -571,7 +667,7 @@ class Evolution:
                     y0_frag = np.array([self.state.R, self.state.V_sh, self.state.E_b, self.state.M_sh, self.state.n_cloud_avg])
                     t_span_frag = (t_frag_start, MAX_SIMULATION_TIME)
                     atols_frag = get_atols(y0_frag[0], y0_frag[2], phase=self.state.phase, dynamic_cloud_density=self.dynamic_cloud_density)
-                    self.logger.debug(f"Solving IVP for Fragmentation: t_span={t_span_frag}, y0={y0_frag}, atols={atols_frag}, rtol={RTOL_MAIN_FRAG}")
+                    self.logger.debug(_solve_line("fragmentation", t_span_frag, y0_frag, atols_frag, RTOL_MAIN_FRAG))
 
                     sol_frag = solve_ivp(
                         self.integrated_evolution, 
@@ -591,7 +687,7 @@ class Evolution:
                         self.t_end_frag = self.state.t
                         generation_results = self.process_and_concatenate_results(generation_results) # append_to_all is not True here
                         self.state.phase = 'phase2'
-                        self.logger.info(f"Initialized Phase 2 at t={self.state.t/MYR_TO_SEC:.2f} Myr")
+                        self.logger.rule(f"PHASE 2 begins at t = {self.state.t/MYR_TO_SEC:.4f} Myr")
                         self.logger.info(f"Phase 2 initial conditions: R={self.state.R/PC_TO_CM:.2f} pc, "
                                 f"V={self.state.V_sh/KM_TO_CM:.2f} km/s, "
                                 f"M={self.state.M_sh/M_SUN:.2e} M_sun,"
@@ -621,7 +717,7 @@ class Evolution:
                     t_span_phase2 = (t_start_phase2, MAX_SIMULATION_TIME)
                     y0_phase2 = np.array([self.state.R, self.state.V_sh, self.state.M_sh, self.state.n_cloud_avg])
                     atols_phase2 = get_atols(y0_phase2[0], phase=self.state.phase, dynamic_cloud_density=self.dynamic_cloud_density)
-                    self.logger.debug(f"Solving IVP for phase-2/dissolution: t_span={t_span_phase2}, y0={y0_phase2}, atols={atols_phase2}, rtol={RTOL_MAIN_PH2}")      
+                    self.logger.debug(_solve_line("phase 2/dissolution", t_span_phase2, y0_phase2, atols_phase2, RTOL_MAIN_PH2))
                     
                     termination_identifier = None
                     with capture_output() as get_buffers:
@@ -658,21 +754,20 @@ class Evolution:
                     # Process results of the second solve_ivp
                     if self.state.dissolved:
                         self.t_dissolution = self.state.t
-                        self.logger.info(f"Shell dissolved at t={self.t_dissolution/MYR_TO_SEC:.2f} Myr")
+                        self.logger.rule(f"DISSOLVED at t = {self.t_dissolution/MYR_TO_SEC:.4f} Myr")
                         generation_results = self.process_and_concatenate_results(generation_results, append_to_all=True)
                         break
                     elif sol_phase2.t_events[0].size > 0:  # Recollapse occurred
                         self.t_recollapse = self.state.t
-                        self.logger.info(f"Shell recollapsed at t={self.t_recollapse/MYR_TO_SEC:.2f} Myr")
+                        self.logger.rule(f"RECOLLAPSE at t = {self.t_recollapse/MYR_TO_SEC:.4f} Myr")
                         generation_results = self.process_and_concatenate_results(generation_results, append_to_all=True)
-                        self.logger.info("Starting new generation")
                         self.add_new_generation()
                         generation_results = {}  # reset for the next gen
                     elif abs(sol_phase2.t[-1] - MAX_SIMULATION_TIME) <= RTOL_MAIN_PH2 * MAX_SIMULATION_TIME:
                         self.state.t_end = MAX_SIMULATION_TIME
                         self.state.t = MAX_SIMULATION_TIME
                         generation_results = self.process_and_concatenate_results(generation_results, append_to_all=True)
-                        self.logger.info(f"Simulation reached maximum time at t={self.state.t_end/MYR_TO_SEC:.2f} Myr")
+                        self.logger.rule(f"END: maximum time reached at t = {self.state.t_end/MYR_TO_SEC:.2f} Myr")
                         break
                     else:
                         self.logger.error(f"Phase-2 ended unexpectedly at t={sol_phase2.t[-1]/MYR_TO_SEC:.2f} Myr")
@@ -681,19 +776,7 @@ class Evolution:
                         self.logger.error(f"Time remaining: {(MAX_SIMULATION_TIME - sol_phase2.t[-1])/MYR_TO_SEC:.2f} Myr")
                         raise RuntimeError("Phase-2 failed: did not dissolve, recollapse, or reach maximum time")
                         
-            simulation_params = {
-                "Z": self.Z,
-                "eta_sf": self.eta_sf,
-                "n_cl": self.n_cl,
-                "M_cl_init": f"{self.M_cl_init/M_SUN:.2e} Msun",
-                "template": self.template,
-                "imf": self.imf,
-                "cluster_formation_mode": self.cluster_formation_mode,
-                "dark_matter_fraction": getattr(self, "dark_matter_fraction", 0.0),
-                "dark_matter_mass": f"{getattr(self, 'M_dm', 0.0)/M_SUN:.2e} Msun",
-                "f_dust": self.f_dust,
-            }
-
+            simulation_params = self._dat_parameters()
             self.tracker.write_output_file(self.output_path, simulation_params, self.all_results, self.logger)
             self.logger.info(f"Simulation completed at t={self.state.t_end/MYR_TO_SEC:.2f} Myr")
                     
@@ -716,7 +799,7 @@ class Evolution:
         3. Original solvers with looser tolerance (default solvers, looser rtol)
 
         Each attempt is guarded by a :class:`LogStallWatchdog`, which escalates to the next
-        attempt when EITHER the run's log stops growing for ``STALL_TIMEOUT`` (a genuinely
+        attempt when EITHER no new state table is logged for ``STALL_TIMEOUT`` (a genuinely
         stuck integration) OR the absolute ``SIMULATION_TIMEOUT`` backstop is reached. The
         stall check means a slow-but-progressing run is not killed before the backstop; when
         there is no log file (null logger) only the flat ``SIMULATION_TIMEOUT`` cap applies.
@@ -726,6 +809,8 @@ class Evolution:
             
         Raises:
             RuntimeError: If all attempts fail
+            ConfigurationError, OSError: at once, without a retry (a deterministic failure;
+                TimeoutError from the watchdog is still retried)
         """
         if getattr(self, "_output_exists", False):
             # Results were already computed and cached on disk (the constructor leaves
@@ -738,57 +823,249 @@ class Evolution:
 
         with self._logging_context():
             self.logger.start_timer()
-            self.logger.info("Starting simulation")
-            # Define standard solvers
-            standard_solvers = (SOLVER_PH1, SOLVER_FRAG, SOLVER_PH2)
-            alternative_solvers = (ALT_SOLVER_PH1, ALT_SOLVER_FRAG, ALT_SOLVER_PH2)
-            
-            # Define attempts parameters: (solvers, rtol)
-            attempts = [
-                (standard_solvers, RTOL_MAIN_PH1),       # Standard attempt
-                (alternative_solvers, RTOL_MAIN_PH1),    # Different solvers
-                (standard_solvers, LOOSER_RTOL)          # Looser tolerance
-            ]
-            
+            self._run_t0 = time.time()
+            self._attempt_history = []
+            attempts = self._attempt_plan()
+            # The watchdog counts state tables (written as simulated time advances), so a
+            # heartbeat or a repeated warning is not taken for progress.
+            progress = (lambda: self.logger.progress_marks) if isinstance(self.logger, EvolutionLogger) else None
+
+            last_error = None
             for attempt, (solvers, rtol) in enumerate(attempts, 1):
-                self.logger.info(
-                    f"\nStarting attempt {attempt}/3 with "
-                    f"solvers=(ph1={solvers[0]}, frag={solvers[1]}, ph2={solvers[2]}), "
-                    f"rtol={rtol}"
-                )
-                
+                self._attempt_index = attempt
+                self.logger.rule(f"ATTEMPT {attempt} of {len(attempts)}: phase1 {solvers[0]}, "
+                                 f"fragmentation {solvers[1]}, phase2 {solvers[2]}, rtol {rtol:g}", '#')
+
                 try:
-                    # Escalate an attempt when its log stops growing (genuinely stuck),
+                    # Escalate an attempt when it stops making progress (genuinely stuck),
                     # not after a flat wall-clock cap: a slow-but-progressing run is left
                     # to finish. SIMULATION_TIMEOUT is the absolute backstop, and the sole
                     # trigger when there is no log file (null logger).
                     with LogStallWatchdog(getattr(self.logger, "log_filepath", None),
-                                          STALL_TIMEOUT, hard_cap=SIMULATION_TIMEOUT):
+                                          STALL_TIMEOUT, hard_cap=SIMULATION_TIMEOUT, progress=progress):
                         results = self.simulation_attempt(solvers, rtol)
                         self.logger.info(f"Attempt {attempt} succeeded")
+                        self._log_run_summary(
+                            f"attempt {attempt} of {len(attempts)} succeeded (solvers phase1 {solvers[0]}, "
+                            f"fragmentation {solvers[1]}, phase2 {solvers[2]}; rtol {rtol:g})", attempt)
                         self.logger.log_total_time()
                         self.logger.flush()
                         self.logger.close()
                         return results
-                        
+
                 except TimeoutError as exc:
+                    last_error = exc
                     self.logger.warning(f"Attempt {attempt} aborted by watchdog: {exc}")
+                except (ConfigurationError, OSError) as e:
+                    # Deterministic (inconsistent inputs or records, a failed write): no other
+                    # solver or tolerance can fix it, so it is raised at once, not retried.
+                    # TimeoutError is an OSError and is caught above, so stalls are retried.
+                    self.logger.error(f"Attempt {attempt} failed with a non-retryable error: {e}\n"
+                                      f"{traceback.format_exc()}")
+                    self._log_run_summary(f"failed in attempt {attempt} ({type(e).__name__}, not retried)", attempt)
+                    self.logger.log_total_time()
+                    self.logger.flush()
+                    self.logger.close()
+                    raise
                 except Exception as e:
+                    last_error = e
                     tb_str = traceback.format_exc()
                     self.logger.warning(f"Attempt {attempt} failed with error: {str(e)}\n{tb_str}")
-                
+                self._attempt_history.append({
+                    'index': attempt, 'solvers': dict(zip(('phase1', 'fragmentation', 'phase2'), solvers)),
+                    'rtol': rtol, 'error_class': type(last_error).__name__,
+                    'error': str(last_error).splitlines()[0] if str(last_error) else ''})
+
                 # Clean up everything after failed attempt
                 if attempt < len(attempts):
                     self.cleanup_after_attempt()
-            
+
             # If we get here, all attempts failed
             self.logger.error("All attempts failed")
+            self._log_run_summary(f"failed after {len(attempts)} attempts", len(attempts))
             self.logger.log_total_time()
             self.logger.flush()
             self.logger.error("Failed to complete simulation after all attempts")
             self.logger.close()
-            return
+            raise RuntimeError(f"Evolution failed after {len(attempts)} attempts: {self.output_path}") \
+                from last_error
 
+
+    # ------------------------------------------------------------------ run record
+    def _log_generation(self, i):
+        """One line when generation i starts: its time, the stellar mass it forms and the
+        cloud gas left (stochastic: its star count, drawn mass and seed stream)."""
+        sf = self.stellar_feedback
+        t = 0.0 if i == 0 else self.state.t_list_collapse[i - 1] / MYR_TO_SEC
+        cause = "" if i == 0 else f" (recollapse of generation {i - 1})"
+        msg = (f"GENERATION index {i} starts at t = {t:.4f} Myr{cause}: stellar mass formed "
+               f"{float(sf.M_stellar_list[i]):.4e} M_sun, cloud gas left {self.M_cl / M_SUN:.4e} M_sun")
+        if self.stochastic is not None:
+            p = sf.populations[i]
+            msg += (f"; {len(p.masses_msun)} stars drawn ({p.drawn_mass_msun:.4e} M_sun), "
+                    f"stream (base_seed {p.base_seed}, generation {i})")
+        self.logger.rule(f"GENERATION {i}", '=')
+        self.logger.info(msg)
+        if i > 0:
+            self.logger.log_profile_info(self.density_profile)
+
+    def _dat_parameters(self):
+        """The .dat ``parameters`` record (called inside the attempt, at the write)."""
+        simulation_params = {
+            "Z": self.Z,
+            "eta_sf": self.eta_sf,
+            "n_cl": self.n_cl,
+            "M_cl_init": f"{self.M_cl_init/M_SUN:.2e} Msun",
+            "template": self.template,
+            "imf": self.imf,
+            "cluster_formation_mode": self.cluster_formation_mode,
+            "dark_matter_fraction": getattr(self, "dark_matter_fraction", 0.0),
+            "dark_matter_mass": f"{getattr(self, 'M_dm', 0.0)/M_SUN:.2e} Msun",
+            "f_dust": self.f_dust,
+            "feedback_md5": self.feedback_md5,
+            "track_code_version": TRACK_CODE_VERSION,
+            # where this run's outputs live; the Cloudy stage writes under it too (not in
+            # `inputs`: the root does not key the cache)
+            "output_root": getattr(self, 'resolved_output_root', None) or os.path.abspath(self._output_root()),
+        }
+        if self.stochastic is not None:
+            simulation_params["stochastic"] = self._stochastic_record()
+        simulation_params["inputs"] = self._inputs_record()
+        simulation_params["run_record"] = self._run_record()
+        return simulation_params
+
+    def _inputs_record(self):
+        """Exact inputs for the .dat (load_output_file prefers them to the file path, so a
+        moved or renamed .dat keeps its parameters and M_cl_init is not rounded to 0.01 dex).
+        Plain Python types only (to_plain), so numpy-typed arguments serialise and key the
+        cache like their plain twins."""
+        return to_plain({
+            'Z': self.Z, 'eta_sf': self.eta_sf, 'n_cl': self.n_cl, 'M_cl_init_msun': self.M_cl_init / M_SUN,
+            'template': self.template, 'imf': self.imf, 'star_type': self.star_type,
+            'cluster_formation_mode': self.cluster_formation_mode,
+            'formation_timescale_myr': (None if self.formation_timescale is None
+                                        else self.formation_timescale / MYR_TO_SEC),
+            'profile_type': self.profile_type, 'profile_params': self.profile_params,
+            'add_cover_frac': self.add_cover_frac,
+            'post_sweep_covering_fraction': self.post_sweep_covering_fraction,
+            'dynamic_cloud_density': self.dynamic_cloud_density, 'f_dust': self.f_dust,
+            'dark_matter_fraction': self.dark_matter_fraction,
+            'include_gravity': self.include_gravity, 'include_lyman_alpha': self.include_lyman_alpha,
+            'include_external_pressure': self.include_external_pressure,
+            'use_Tion_model': self.use_Tion_model, 'init_with_fragmentation': self.init_with_fragmentation,
+        })
+
+    def _attempt_plan(self):
+        """(solvers, rtol) of each attempt of run_simulation, in order."""
+        return [((SOLVER_PH1, SOLVER_FRAG, SOLVER_PH2), RTOL_MAIN_PH1),
+                ((ALT_SOLVER_PH1, ALT_SOLVER_FRAG, ALT_SOLVER_PH2), RTOL_MAIN_PH1),
+                ((SOLVER_PH1, SOLVER_FRAG, SOLVER_PH2), LOOSER_RTOL)]
+
+    def _run_record(self):
+        """Machine-readable record of how this run was made (the .dat 'run_record' key);
+        called inside the attempt, so the solver and tolerance globals are the attempt's."""
+        idx = getattr(self, '_attempt_index', 1)
+        history = list(getattr(self, '_attempt_history', []))
+        solvers = {'phase1': SOLVER_PH1, 'fragmentation': SOLVER_FRAG, 'phase2': SOLVER_PH2}
+        return {
+            'versions': code_provenance(), 'track_code_version': TRACK_CODE_VERSION,
+            'attempt_used': idx,
+            'attempts': history + [{'index': idx, 'solvers': solvers, 'rtol': RTOL_MAIN_PH1,
+                                    'error_class': None, 'error': None}],
+            'solvers_used': solvers,
+            'rtol_used': {'phase1': RTOL_MAIN_PH1, 'fragmentation': RTOL_MAIN_FRAG, 'phase2': RTOL_MAIN_PH2},
+            'rhs_calls': dict(self._rhs_calls),
+            'wall_time_s': round(time.time() - getattr(self, '_run_t0', time.time()), 3),
+            'stall_timeout_s': STALL_TIMEOUT, 'heartbeat_s': evolution_logging.HEARTBEAT_S,
+        }
+
+    def _log_run_header(self):
+        """The RUN RECORD block at the start of run_simulation: code, environment, inputs,
+        attempt plan, watchdog settings and every constructor argument."""
+        from ._paths import get_data_dir
+        from .stellar_feedback import feedback_table_path
+        prov = code_provenance()
+        git = (f"git {prov['git_commit'][:12]} ({'uncommitted changes' if prov['git_dirty'] else 'clean'})"
+               if prov['git_commit'] else "not a git checkout")
+        lines = [f"code        toddlers {prov['toddlers']}, {git}, track code version {TRACK_CODE_VERSION}",
+                 f"python      {prov['python']}  |  numpy {prov['numpy']}  |  scipy {prov['scipy']}",
+                 f"host        {platform.node()}  |  {prov['os']}",
+                 f"output      {self.output_path}",
+                 f"data dir    {get_data_dir()}"]
+        if self.stochastic is not None:
+            lines.append(f"feedback    stochastic pySB99 (run-time draws), fingerprint {self.feedback_md5}")
+            spec = self.stochastic.to_dict()
+            lines.append("stochastic  " + ", ".join(f"{k} {v}" for k, v in spec.items()))
+        else:
+            path = feedback_table_path(self.template, self.imf, self.star_type)
+            table = os.path.basename(path) if os.path.exists(path) else "2.0 .obj table (deprecated)"
+            lines.append(f"feedback    {self.template} / imf {self.imf} / star type {self.star_type}")
+            lines.append(f"            table {table}  |  md5 {self.feedback_md5}")
+        lines += EvolutionLogger.solver_lines()
+        ratio = RTOL_MAIN_PH2 / RTOL_MAIN_PH1
+        for k, (sv, r) in enumerate(self._attempt_plan(), 1):
+            lines.append(f"attempt {k}   phase1 {sv[0]}, fragmentation {sv[1]}, phase2 {sv[2]}  |  "
+                         f"rtol {r:g} (phase 2: {r * ratio:g})")
+        lines.append(f"watchdog    escalate after {STALL_TIMEOUT / 60:.0f} min without a new state table, "
+                     f"hard cap {SIMULATION_TIMEOUT / 60:.0f} min per attempt; heartbeat every "
+                     f"{evolution_logging.HEARTBEAT_S} s")
+        lines.append("arguments")
+        for k, v in self._init_kwargs.items():
+            if k == 'M_cl_init':
+                v = f"{v:.6e} g ({v / M_SUN:.4e} M_sun)"
+            elif k == 'formation_timescale' and v is not None:
+                v = f"{v:.6e} s ({v / MYR_TO_SEC:.4g} Myr)"
+            lines.append(f"  arg {k} = {v}")
+        self.logger.block("RUN RECORD", lines)
+
+    def _log_physics(self):
+        """The PHYSICS block: feedback, star formation, switches, f_dust and fudge factors."""
+        on = lambda b: "on" if b else "off"
+        mode = self.cluster_formation_mode
+        if mode == 'constant_sfr':
+            mode += f", formation timescale {self.formation_timescale / MYR_TO_SEC:.3g} Myr"
+        lines = [f"feedback    {self.template}, imf {self.imf}, star type {self.star_type}"
+                 + (", stochastic (run-time draws)" if self.stochastic is not None else ""),
+                 f"formation   {mode}",
+                 f"forces      gravity {on(self.include_gravity)}, Lyman-alpha {on(self.include_lyman_alpha)}, "
+                 f"external pressure {on(self.include_external_pressure)}",
+                 f"covering    " + (f"on, post-sweep value {self.post_sweep_covering_fraction}" if self.add_cover_frac else "off"),
+                 f"T_ion       " + ("from the Cloudy interpolator" if self.use_Tion_model else "fixed"),
+                 f"cloud       density {'dynamic' if self.dynamic_cloud_density else 'static'}; start in "
+                 + ("fragmentation" if self.init_with_fragmentation else "phase 1"),
+                 f"f_dust      {self.f_dust:.2f} (grain abundance scaling factor)"]
+        if self.dark_matter_fraction > 0:
+            lines.append(f"dark matter fraction {self.dark_matter_fraction:.3f}, mass {self.M_dm / M_SUN:.3e} M_sun")
+        lines += EvolutionLogger.fudge_lines()
+        self.logger.block("PHYSICS", lines)
+
+    def _log_run_summary(self, result, n_attempts):
+        """The RUN SUMMARY block: outcome, earlier attempts, generations with their phase
+        transitions, recollapse times, end state, wall time and RHS calls by phase."""
+        try:
+            lines = [f"result: {result}"]
+            for h in getattr(self, '_attempt_history', []):
+                lines.append(f"attempt {h['index']}: {h['error_class']}: {h['error']}")
+            gens = [g for g in self.all_results if isinstance(g, dict)]
+            lines.append(f"generations: {len(gens)}")
+            for g in gens:
+                steps = ", ".join(f"{name.replace('_to_', ' -> ')} at {t / MYR_TO_SEC:.2f} Myr"
+                                  + (f" ({reason})" if reason else "")
+                                  for name, t, reason in g.get('phase_transitions', []))
+                lines.append(f"  generation {g.get('generation')}: {g.get('status')}; {steps or 'no transition'}")
+            rec = self.state.t_list_collapse
+            lines.append("recollapses at: " + (", ".join(f"{t / MYR_TO_SEC:.2f}" for t in rec) + " Myr" if rec else "none"))
+            lines.append(f"end: t = {self.state.t_end / MYR_TO_SEC:.2f} Myr")
+            total = time.time() - getattr(self, '_run_t0', time.time())
+            h, rem = divmod(total, 3600)
+            m, sec = divmod(rem, 60)
+            lines.append(f"wall time: {int(h):02d}:{int(m):02d}:{sec:04.1f} total over {n_attempts} attempt(s); "
+                         "last attempt by phase: " + ", ".join(f"{p} {w:.1f} s" for p, w in self._phase_wall.items()))
+            lines.append("RHS calls, last attempt: " + ", ".join(f"{p} {n}" for p, n in self._rhs_calls.items()))
+            lines.append(f"output: {self.output_path}")
+            self.logger.block("RUN SUMMARY", lines)
+        except Exception as e:  # the summary must never hide the run's own error
+            self.logger.warning(f"run summary could not be written: {e!r}")
 
     def integrated_evolution(self, t, x):
         """
@@ -814,6 +1091,14 @@ class Evolution:
                         - phase1/fragmentation: [dR/dt, dV/dt, dE/dt, dM/dt, dn_cloud_avg/dt]
                         - phase2/dissolution: [dR/dt, dV/dt, dM/dt, dn_cloud_avg/dt]
         """
+        phase = self.state.phase
+        now = time.perf_counter()
+        if self._last_rhs_wall is not None:
+            self._phase_wall[phase] = self._phase_wall.get(phase, 0.0) + now - self._last_rhs_wall
+        self._last_rhs_wall = now
+        self._rhs_calls[phase] = self._rhs_calls.get(phase, 0) + 1
+        self.logger.heartbeat(t, phase, sum(self._rhs_calls.values()))
+
         assert t >= max(self.state.t_list_collapse + [0]), "Current time is before last collapse time"
     
         if self.state.phase in ['phase1', 'fragmentation']:
@@ -1398,7 +1683,7 @@ class Evolution:
         
         if append_to_all and updated_results:
             self.all_results.append(updated_results)
-            self.logger.debug(f"Added generation {self.state.current_generation + 1} results to all_results")
+            self.logger.debug(f"Added generation {self.state.current_generation} results to all_results")
             
         return updated_results
 
@@ -1522,6 +1807,38 @@ class Evolution:
             'F_mass_gain': self.state.V_sh * self.get_mass_change_rate()
             }
 
+    def _write_cached_generation_tables(self):
+        """A reused stochastic run gets the generation tables save_generation_tables asks for
+        (the option is not part of the cache key). A failure to rebuild them is
+        reported and the cached run is still reused: load_run_generations can rebuild later."""
+        from .pysb99.stochastic.population import write_missing_run_generation_tables
+        try:
+            written = write_missing_run_generation_tables(self.output_path, self.stochastic.database_path)
+        except (ValueError, OSError, ConfigurationError) as e:
+            print(f"Warning: the generation tables of the cached run '{self.output_path}' could not "
+                  f"be written ({e}); the run is reused without them.")
+            return
+        for p in written:
+            print(f"Wrote the generation table {os.path.basename(p)} of the cached run.")
+
+    def _stochastic_record(self):
+        """Spec plus per-generation star-list records for the output; the star lists go to
+        a compressed _stars.npz next to the .dat (md5 recorded), and inline below 1e4 stars."""
+        from .pysb99.stochastic.population import write_star_lists, population_records
+        pops = self.stellar_feedback.populations
+        sidecar = self.output_path[:-len('.dat')] + '_stars.npz'
+        os.makedirs(os.path.dirname(sidecar), exist_ok=True)
+        md5 = write_star_lists(pops, sidecar)
+        rec = self.stochastic.to_dict()
+        rec['generations'] = population_records(pops, sidecar, md5)
+        if self.save_generation_tables:
+            from .pysb99.stochastic.population import write_run_generation_tables
+            paths = write_run_generation_tables(pops, self.stellar_feedback.generation_tables,
+                                                self.output_path, sidecar, md5)
+            for r, p in zip(rec['generations'], paths):
+                r['feedback_table_file'] = os.path.basename(p)
+        return rec
+
     def add_new_generation(self):
         """
         Set up a new generation after shell recollapse.
@@ -1540,9 +1857,8 @@ class Evolution:
         # Update cloud mass
         self.M_cl *= (1 - self.eta_sf)
         
-        # Reinitialize density profile with updated mass
+        # Reinitialize density profile with updated mass (logged with the generation line)
         self.initialize_density_profile()
-        self.logger.log_profile_info(self.density_profile)
 
         # Reinitialize StellarFeedback with updated parameters
         self.stellar_feedback = StellarFeedback(
@@ -1553,12 +1869,17 @@ class Evolution:
             self.state.t_list_collapse,
             mode=self.cluster_formation_mode, 
             formation_timescale=self.formation_timescale,
-            imf=self.imf,
-            star_type=self.star_type
+            imf=None if self.stochastic is not None else self.imf,
+            star_type=self.star_type,
+            stochastic=self.stochastic,
+            populations=self.stellar_feedback.populations
         )
-        
+        self._log_generation(self.state.current_generation)
+
         # Reset or update other parameters as needed
         self.state.phase = 'phase1'
+        # state.t_old carries over from the previous generation; the cumulative timers below
+        # include that first step.
         self.state.dt_cum_dissolution = 0
         self.state.dt_cum_stalled = 0
         self.state.dt_cum_posAcc = 0
@@ -1649,26 +1970,9 @@ class Evolution:
 
     def cleanup_after_attempt(self):
         """Clean up all variables after a failed attempt to ensure fresh start."""
-        # Store parameters that were passed to __init__
-        init_params = {
-            'Z': self.Z,
-            'eta_sf': self.eta_sf,
-            'n_cl': self.n_cl,
-            'M_cl_init': self.M_cl_init,
-            'template': self.template,
-            'cluster_formation_mode': self.cluster_formation_mode,
-            'formation_timescale': self.formation_timescale,
-            'profile_type': self.profile_type,
-            'profile_params': self.profile_params,
-            'dynamic_cloud_density': self.dynamic_cloud_density,
-            'imf': self.imf,
-            'star_type': self.star_type,
-            'add_cover_frac': self.add_cover_frac,
-            'post_sweep_covering_fraction': self.post_sweep_covering_fraction,
-            'dark_matter_fraction': self.dark_matter_fraction,
-            'skip_logger_init': True,  # Skip logger initialization during cleanup
-            'init_with_fragmentation': self.init_with_fragmentation 
-        }
+        # Replay the constructor arguments as given, so a retry runs with every setting
+        # of the original run (f_dust and the physics switches included).
+        init_params = dict(self._init_kwargs, skip_logger_init=True)
         
         # Store the old logger
         old_logger = self.logger

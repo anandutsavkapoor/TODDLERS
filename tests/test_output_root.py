@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """The Cloudy output location must be relocatable via $TODDLERS_OUTPUT_ROOT / --output-root.
 
-Cloudy output is large (~0.5 TiB per DTM on a full grid). It was hardcoded to the package's
-parent dir (dirname(dirname(__file__))/cloudy_output), which is wrong for a read-only / relocated
-install and forced a symlink hack. These tests pin: (1) the shared resolver honors the env var
-and otherwise preserves the historical default; (2) campaign exports TODDLERS_OUTPUT_ROOT into
-both the Cloudy worker job and the build job (so the writer and the interpolant reader agree),
-and points the archiver at the same root; (3) omitting it changes nothing (empty export -> default).
+Cloudy output is large (~0.5 TiB per DTM on a full grid), so it must be placeable outside
+the package tree (a read-only or relocated install). These tests pin: (1) the shared
+resolver honors the env var and otherwise uses the default (cloudy_output/ in the package's
+parent dir); (2) campaign exports TODDLERS_OUTPUT_ROOT into both the Cloudy worker job and
+the build job, and points the archiver at the tree the Cloudy workers write: next to the
+evolution_output/ of --evolution-dir (utils.output_root_of, the rule of the writer and of
+the STAB build; tests/test_cloudy_root_rule.py); (3) omitting it changes nothing (empty
+export -> default).
 """
 import sys
 from pathlib import Path
@@ -51,13 +53,15 @@ def test_output_root_exported_to_both_jobs(tmp_path):
     cloudy, stab = _run_main(tmp_path, root)
     assert f"export TODDLERS_OUTPUT_ROOT={root}" in cloudy   # Cloudy workers write here
     assert f"export TODDLERS_OUTPUT_ROOT={root}" in stab     # interpolant build reads here
-    assert f"{root}/cloudy_output" in stab                   # archiver targets the same root
+    assert f"{tmp_path}/cloudy_output" in stab               # archiver: where the workers write
 
 
-def test_no_output_root_keeps_default(tmp_path):
+def test_no_output_root_keeps_default(tmp_path, monkeypatch):
+    # neither the flag nor the variable (campaign follows $TODDLERS_OUTPUT_ROOT)
+    monkeypatch.delenv("TODDLERS_OUTPUT_ROOT", raising=False)
     cloudy, stab = _run_main(tmp_path, "")
     # Cloudy template always carries the export; empty value -> runtime falls back to the default.
     assert "export TODDLERS_OUTPUT_ROOT=\n" in cloudy
-    # No scratch root injected into the build job, and the archiver uses the package-src default.
+    # No scratch root injected into the build job; the archiver targets the evolution dir's root.
     assert "export TODDLERS_OUTPUT_ROOT=/" not in stab
-    assert "/src/cloudy_output" in stab
+    assert f"{tmp_path}/cloudy_output" in stab

@@ -17,7 +17,7 @@ def _args(**over):
     base = dict(
         evolution_dir="/scratch/evo", work_root="/scratch/work", cloudy_output="/scratch/cloudy",
         stab_dir="/scratch/stab", cache_dir="/scratch/cache", prefix="BPASS_chab100_bin",
-        small_to_large_ratio=0.40, account="gvo00053", partition="doduo", ntasks=96, max_nodes=8,
+        small_to_large_ratio=0.40, account="my_account", partition="my_partition", ntasks=96, max_nodes=8,
         walltime="3-00:00:00", stab_walltime="12:00:00", toddlers_src="/data/toddlers_public/src",
         cloudy_exe="/data/cloudy/source/cloudy.exe", cloudy_data="/data/cloudy/data",
         python_module="SciPy-bundle/2024.05-gfbf-2024a", max_resume_rounds=10, activate_env="",

@@ -32,10 +32,12 @@ flags / environment variables.
 git clone <repo> && cd toddlers
 module load <a SciPy bundle>           # provides numpy/scipy/h5py/...
 pip install --user -e .                # or into a conda/venv env
-python scripts/download_data.py        # large libraries (tracks, atmospheres, db)
+python scripts/download_data.py        # Cloudy stellar-continua tables (needs Cloudy)
+python scripts/download_data.py --stochastic-tracks   # single-star database, for stochastic grids
 ```
 
-Point the data resolver at the downloaded data (if not the package default):
+The feedback tables ship in `src/toddlers/database/`. Set `TODDLERS_DATA` only if the data
+live elsewhere; that directory must then hold the shipped `*_feedback.h5` tables as well:
 
 ```bash
 export TODDLERS_DATA=/path/to/toddlers/data
@@ -50,10 +52,20 @@ python -m toddlers.hpc.generate_tasks evolution \
 # -> tasks/evolution.tasks
 ```
 
+A stochastic grid (template `pySB99`, no `imf`) gives each spec as a JSON object, one list
+entry per spec, for example
+`"stochastic": [{"imf": {"name": "kroupa", "m_low": 0.1, "m_up": 100.0}, "base_seed": 23}]`.
+The fields are those of `StochasticSpec`; the single-star database defaults to the worker
+machine's `$TODDLERS_DATA/single_star_tracks.h5`. A key the spec does not know is refused.
+
 Copy `templates/submit_evolution.sh`, replace every `@PLACEHOLDER@`
 (`@ACCOUNT@`, `@PARTITION@`, `@NTASKS@`, `@WALLTIME@`, `@PYTHON_MODULE@`,
-`@ACTIVATE_ENV@`, `@TODDLERS_SRC@`, `@TODDLERS_DATA@`, `@TASKFILE@`,
+`@ACTIVATE_ENV@`, `@TODDLERS_SRC@`, `@TODDLERS_DATA@`, `@OUTPUT_ROOT@`, `@TASKFILE@`,
 `@RESULTSDIR@`), then:
+
+`@OUTPUT_ROOT@` is the directory that holds `evolution_output/`, `evolution_logs/` and
+`cloudy_output/` (set it to scratch for large runs; empty keeps the default, the directory that holds the package). Every
+placeholder must be replaced: an unreplaced `@OUTPUT_ROOT@` is taken as a directory name.
 
 ```bash
 sbatch submit_evolution.sh
@@ -64,7 +76,7 @@ sbatch submit_evolution.sh
 ```bash
 # enumerate work items from the evolution .dat outputs, one file per phase
 python -m toddlers.hpc.generate_tasks cloudy \
-    --input-dir evolution_output --pattern '*.dat' -o tasks --add-dig
+    --input-dir <output root>/evolution_output --pattern '*.dat' -o tasks --add-dig
 # -> tasks/cloudy_shell.tasks, tasks/cloudy_unified.tasks, tasks/cloudy_dig.tasks
 ```
 
@@ -80,8 +92,9 @@ un=$(sbatch --parsable --dependency=afterok:$sh --export=ALL,PHASE=unified submi
 sbatch          --dependency=afterok:$un --export=ALL,PHASE=dig        submit_cloudy.sh
 ```
 
-`submit_cloudy.sh` sets `TMPDIR=/dev/shm` (Cloudy I/O in RAM) and passes the
-cluster's `cloudy.exe` via `CLOUDY_EXE`.
+`submit_cloudy.sh` takes the same placeholders (the same `@OUTPUT_ROOT@`: the Cloudy files go
+next to the evolution files) plus `@CLOUDY_EXE@`, `@SMALL_TO_LARGE_RATIO@` and `@TASKDIR@`. It
+sets `TMPDIR=/dev/shm` (Cloudy I/O in RAM) and passes the cluster's `cloudy.exe` via `CLOUDY_EXE`.
 
 ## 4. Check status / resume
 
@@ -230,8 +243,9 @@ resume gate — no manual resubmit needed.
   short on-cluster run, reading the per-worker `[wNN] DONE: N tasks in Ts` lines.
 - Clear stale `__pycache__` after updating code on the cluster.
 - **A `[patch-check]` line warns if `cloudy.exe` lacks the unattenuated-continuum patch.**
-  The patch (`cloudy_patches/`) is optional; without it Cloudy writes no `.diffContUnatt`,
-  so the noDust / variable-f_dust SEDs fall back to the standard attenuated diffuse continuum.
+  The patch (`cloudy_patches/`) is optional; without it the unattenuated diffuse continuum
+  is NOT produced: a stock Cloudy writes `.diffContUnatt` with its standard, attenuated
+  diffuse continuum, so the noDust / variable-f_dust SEDs use the attenuated one.
   Each worker notes this once (greppable as `[patch-check]`) if the patch is absent, so you
   know which behaviour a grid was built with. No warning means the patch is present.
 - **After rebuilding or re-patching `cloudy.exe`, clear (or force-regenerate) the

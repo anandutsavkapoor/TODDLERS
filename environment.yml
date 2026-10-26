@@ -4,20 +4,21 @@ channels:
   - conda-forge
 
 dependencies:
-  # Core Python
-  - python=3.8
+  # Core Python (pyproject.toml: requires-python >= 3.10)
+  - python=3.11
 
-  # Main dependencies
-  - numpy=1.20
-  - scipy=1.8
-  - astropy=4.2
-  - matplotlib=3.4
+  # Main dependencies (no version pins; see README)
+  - numpy
+  - scipy
+  - astropy
+  - matplotlib
   - pandas
   - h5py
   - requests
   - tqdm
   - psutil
   - gdown
+  - zstandard
 
   # Development dependencies
   - pip
@@ -27,7 +28,6 @@ dependencies:
   - pytest-cov
   - flake8
   - black
-  - zstandard
 
   # Optional: PTS (Python Toolkit for SKIRT) - install separately if needed
   # pip install pts

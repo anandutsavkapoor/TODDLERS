@@ -1,10 +1,10 @@
-"""Stellar population frameworks: SB99 vs BPASS binaries (needs feedback data).
+"""Stellar population frameworks: SB99 vs BPASS binaries (shipped feedback tables).
 
 TODDLERS supports Starburst99 (single-star) and BPASS (with binary evolution), among
 others. Binaries keep the ionizing output harder and more sustained at late ages. This
 runs the same cloud with each population and compares the shell expansion.
 
-Requires: `python scripts/download_data.py` (incl. the BPASS tables).
+No download needed: the feedback tables ship with the package.
 """
 import os
 
