@@ -20,6 +20,7 @@ NON_DEFAULT = dict(
     include_external_pressure=False, dynamic_cloud_density=True, dark_matter_fraction=0.1,
     add_cover_frac=True, post_sweep_covering_fraction=0.7, init_with_fragmentation=True,
     cluster_formation_mode='constant_sfr', formation_timescale=3 * MYR_TO_SEC,
+    dissolution_criterion='density',
 )
 
 

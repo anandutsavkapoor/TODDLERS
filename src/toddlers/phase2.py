@@ -68,7 +68,8 @@ class Phase2:
 
         if dissolution_condition:
             if shell_dissolved:
-                reason = "Low shell density post-supernova"
+                reason = ("Low shell density post-supernova" if self.evolution.dissolution_criterion == 'density'
+                          else "Weak driving pressure post-supernova")
             elif shell_too_large:
                 reason = "Shell radius exceeds dissolution limit"
             elif shell_stalled:

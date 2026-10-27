@@ -28,8 +28,9 @@ from .utils import format_value, func_tanh_extPressure_velocity, func_tanh_extPr
 
 # Bump when the evolution code changes the track computed for unchanged inputs; cached
 # tracks recorded with another version are then recomputed.
-# The current version (2) reads supernova point events linearly in t.
-TRACK_CODE_VERSION = 2
+# The current version (3) keeps pressure continuity across the ionization front of the shell
+# and tests dissolution on the driving pressure (dissolution_criterion).
+TRACK_CODE_VERSION = 3
 
 
 def _solve_line(name, t_span, y0, atols, rtol):
@@ -62,6 +63,20 @@ def cached_output_status(path, feedback_md5, inputs=None):
     if inputs is not None and params.get('inputs') != json.loads(json.dumps(inputs)):
         return 'stale'
     return 'current'
+
+
+def dissolution_measure(criterion, n_shell_max, n_shell_max_ionized, F_rad_UV_IR, F_ram):
+    """Quantity compared with DISSOLUTION_DENSITY [cm^-3] by the dissolution test.
+
+    * 'push': the driving pressure on the shell in density units of the ionized gas,
+      n_shell_max_ionized * (1 + F_rad_UV_IR / F_ram); infinite when F_ram <= 0;
+    * 'density': the peak shell density n_shell_max.
+    """
+    if criterion == 'density':
+        return n_shell_max
+    if criterion == 'push':
+        return n_shell_max_ionized * (1 + F_rad_UV_IR / F_ram) if F_ram > 0 else np.inf
+    raise ValueError(f"unknown dissolution criterion {criterion!r}")
 
 
 def move_output_aside(path):
@@ -136,7 +151,7 @@ class Evolution:
                 use_Tion_model=False, skip_logger_init=False, init_with_fragmentation=False,
                 include_gravity=True, include_lyman_alpha=True,
                 include_external_pressure=True, f_dust=1.0, stochastic=None,
-                save_generation_tables=True, output_root=None):
+                save_generation_tables=True, output_root=None, dissolution_criterion='push'):
         """
         Initialize the Evolution object.
 
@@ -182,6 +197,14 @@ class Evolution:
                 pressure contribution. UV+IR radiation is unaffected.
             include_external_pressure (bool, optional): If False, disables the external
                 cloud/ISM pressure force on the shell.
+            dissolution_criterion (str, optional): Quantity tested against DISSOLUTION_DENSITY
+                (held for DISSOLUTION_PERIOD, later than T_SN after the start of the generation,
+                cloud fully swept).
+                'push' (default): the driving pressure on the shell in density units,
+                n_shell_max_ionized * (1 + F_rad_UV_IR / F_ram), where F_rad_UV_IR is the direct
+                UV plus IR radiation force (Lyman-alpha excluded) and F_ram the wind and supernova
+                ram force (the bubble force before phase 2). 'density': the peak shell density
+                n_shell_max, the test of version 2.1.0.
             f_dust (float, optional): Grain abundance scaling factor (1.0 = the released dust content).
                 Scales sigma_dust, kappa_IR, and Lyman-alpha dust opacity. Defaults to 1.0.
             stochastic (StochasticSpec or dict, optional): template 'pySB99' with imf=None only.
@@ -198,7 +221,8 @@ class Evolution:
 
         Raises:
             NotImplementedError: If dynamic cloud density is used with a non-uniform profile.
-            ValueError: If an unsupported template or invalid star_type is provided.
+            ValueError: If an unsupported template, an invalid star_type or an unknown
+                dissolution_criterion is provided.
         """
         # Every constructor argument, so a retry (cleanup_after_attempt) rebuilds the
         # object exactly; must stay the first statement, before any other local exists.
@@ -221,6 +245,9 @@ class Evolution:
         self.include_gravity = include_gravity
         self.include_lyman_alpha = include_lyman_alpha
         self.include_external_pressure = include_external_pressure
+        if dissolution_criterion not in ('push', 'density'):
+            raise ValueError(f"dissolution_criterion must be 'push' or 'density', not {dissolution_criterion!r}")
+        self.dissolution_criterion = dissolution_criterion
 
         self.add_cover_frac = add_cover_frac
         if self.add_cover_frac:
@@ -953,6 +980,7 @@ class Evolution:
             'include_gravity': self.include_gravity, 'include_lyman_alpha': self.include_lyman_alpha,
             'include_external_pressure': self.include_external_pressure,
             'use_Tion_model': self.use_Tion_model, 'init_with_fragmentation': self.init_with_fragmentation,
+            'dissolution_criterion': self.dissolution_criterion,
         })
 
     def _attempt_plan(self):
@@ -1641,12 +1669,19 @@ class Evolution:
 
     def check_dissolution_density_condition(self):
         """
-        Check if the conditions for shell dissolution are met.
+        Check if the conditions for shell dissolution are met: the quantity selected by
+        dissolution_criterion (see dissolution_measure) is at most DISSOLUTION_DENSITY, later
+        than T_SN after the start of the generation.
 
         Returns:
             bool: True if dissolution density conditions are met, False otherwise.
         """
-        density_condition = self.state.n_shell_max <= DISSOLUTION_DENSITY
+        F_rad_UV_IR = self.state.eta_rad * self.stellar_feedback.get_bolometric_luminosity(self.state.t) / C
+        F_ram = (self.stellar_feedback.get_ram_force(self.state.t) if self.state.phase in ('phase2', 'dissolution')
+                 else 4 * np.pi * self.state.R**2 * self.state.P_b)
+        measure = dissolution_measure(self.dissolution_criterion, self.state.n_shell_max,
+                                      self.state.n_shell_max_ionized, F_rad_UV_IR, F_ram)
+        density_condition = measure <= DISSOLUTION_DENSITY
         SNE_condition = self.state.t > T_SN + self.state.t_end # latest SN explosion => shell reformation
         return density_condition and SNE_condition
 
