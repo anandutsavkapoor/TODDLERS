@@ -808,3 +808,36 @@ def get_shell_inner_face_density(F, R, Z, Q_i, temp_interpolator=None, fix_n=Fal
 		raise ValueError(f"Temperature below minimum: {T_final} < {T_MIN}")
 		
 	return n_final, T_final
+
+def scaled_solve_ivp(fun, t_span, y0, atol, events=None, **kwargs):
+    """solve_ivp on the state scaled to order unity, z = y / s with s_j = max(|y0_j|, atol_j / rtol).
+
+    The implicit solvers factorize I - c J on the state they integrate; with components many decades apart
+    (bubble energy, shell velocity, momenta) the round-off of that solve can exceed the tolerance of the small
+    components. The scaling leaves the error and Newton norms unchanged in exact arithmetic. fun and every event
+    see the physical state; the returned solution (y, y_events, sol) is in physical units."""
+    y0 = np.asarray(y0, dtype=float)
+    atol = np.broadcast_to(np.asarray(atol, dtype=float), y0.shape)
+    rtol = kwargs.get('rtol', 1e-3)
+    s = np.maximum(np.abs(y0), atol / rtol)
+
+    def fun_z(t, z):
+        return np.asarray(fun(t, z * s), dtype=float) / s
+
+    def wrap(g):
+        def g_z(t, z):
+            return g(t, z * s)
+        g_z.terminal = getattr(g, 'terminal', False)
+        g_z.direction = getattr(g, 'direction', 0)
+        return g_z
+
+    if events is not None:
+        events = [wrap(g) for g in events] if isinstance(events, (list, tuple)) else wrap(events)
+    sol = solve_ivp(fun_z, t_span, y0 / s, atol=atol / s, events=events, **kwargs)
+    sol.y = sol.y * s[:, None]
+    if sol.y_events is not None:
+        sol.y_events = [ye * s if ye.size else ye for ye in sol.y_events]
+    if sol.sol is not None:
+        dense = sol.sol
+        sol.sol = lambda t: (dense(t).T * s).T
+    return sol

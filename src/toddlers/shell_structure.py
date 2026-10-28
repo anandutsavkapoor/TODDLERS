@@ -181,6 +181,7 @@ class ShellStructure:
             vectorized=True, 
             rtol=self.rtol_i, 
             atol=self.atol_i,
+            dense_output=True,
             events=(self.terminate_ionized_phi, self.terminate_ionized_mass)
         )
 
