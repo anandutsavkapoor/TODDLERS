@@ -155,7 +155,9 @@ class ShellStructure:
         
         First solves the ionized region equations until either all ionizing photons
         are absorbed or the full shell mass is reached. If needed, continues with
-        neutral region equations until the full shell mass is incorporated.
+        neutral region equations until the full shell mass is incorporated. The
+        neutral region starts in pressure equilibrium with the ionized gas at the
+        ionization front: n_neutral = n_IF (MU_N / MU_P) (T_ion / T_NEUTRAL).
 
         Args:
             R (float): Shell radius in cm
@@ -179,6 +181,7 @@ class ShellStructure:
             vectorized=True, 
             rtol=self.rtol_i, 
             atol=self.atol_i,
+            dense_output=True,
             events=(self.terminate_ionized_phi, self.terminate_ionized_mass)
         )
 
@@ -189,9 +192,11 @@ class ShellStructure:
         if (self.M_sh - self.shell_strctre_i.y[3][-1]) / self.M_sh > self.mass_tolerance:
             # If the relative difference in mass is greater than the tolerance,
             # we consider that the ionized region doesn't account for the full shell mass
+            # pressure continuity across the ionization front
+            n_front = float(self.shell_strctre_i.y[0][-1]) * ((MU_N / MU_P) * (self.T_ion / T_NEUTRAL))
             IC_n = [
-                float(self.shell_strctre_i.y[0][-1]), 
-                float(self.shell_strctre_i.y[2][-1]), 
+                n_front,
+                float(self.shell_strctre_i.y[2][-1]),
                 float(self.shell_strctre_i.y[3][-1])
             ]
             
