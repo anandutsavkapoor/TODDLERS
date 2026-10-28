@@ -18,7 +18,7 @@ from .shell_structure import ShellStructure
 from .lyman_alpha import LymanAlpha
 from .phase1 import Phase1
 from .fragmentation import Fragmentation
-from .utils import f_dust_label, resolve_output_root, to_plain
+from .utils import f_dust_label, resolve_output_root, scaled_solve_ivp, to_plain
 from .phase2 import Phase2
 from .dissolution import Dissolution
 from .track_simulation import TrackSimulation
@@ -642,7 +642,7 @@ class Evolution:
                     termination_identifier = None
                     with capture_output() as get_buffers:
                         try:
-                            sol_phase1 = solve_ivp(
+                            sol_phase1 = scaled_solve_ivp(
                                 self.integrated_evolution, 
                                 t_span, 
                                 self.y0,
@@ -696,7 +696,7 @@ class Evolution:
                     atols_frag = get_atols(y0_frag[0], y0_frag[2], phase=self.state.phase, dynamic_cloud_density=self.dynamic_cloud_density)
                     self.logger.debug(_solve_line("fragmentation", t_span_frag, y0_frag, atols_frag, RTOL_MAIN_FRAG))
 
-                    sol_frag = solve_ivp(
+                    sol_frag = scaled_solve_ivp(
                         self.integrated_evolution, 
                         t_span_frag, 
                         y0_frag,
@@ -749,7 +749,7 @@ class Evolution:
                     termination_identifier = None
                     with capture_output() as get_buffers:
                         try:
-                            sol_phase2 = solve_ivp(
+                            sol_phase2 = scaled_solve_ivp(
                                 self.integrated_evolution, 
                                 t_span_phase2, 
                                 y0_phase2,

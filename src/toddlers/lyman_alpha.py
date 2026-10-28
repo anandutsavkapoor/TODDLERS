@@ -71,25 +71,28 @@ class LymanAlpha:
 
         velocityFactor = self.get_Lyman_alpha_veloFactor(V_sh)
         
-        # Calculate tau_d_fore using cumulative sum
-        tau_d = self.shell_strctre_i.y[2]
-        tau_d_fore = tau_d[-1] - np.cumsum(np.diff(tau_d))
-        atten_fore = np.exp(-tau_d_fore)
-
-        r_ion = self.shell_strctre_i.t
-        n_sh_ion = self.shell_strctre_i.y[0]
-        dr_ion = np.diff(r_ion)
-
-        # Ensure all arrays have the same length
-        atten_fore = atten_fore[:len(dr_ion)]
-        n_sh_ion = n_sh_ion[:len(dr_ion)]
-        r_ion = r_ion[:len(dr_ion)]
-
         L_Lyalpha_noDust = ION_TO_LYALPHA * Q_i * E_LYALPHA
-        L_Lyalpha_dusty = np.sum(atten_fore * ION_TO_LYALPHA * ALPHA_B * (n_sh_ion**2) * (4*np.pi*(r_ion**2)*dr_ion) * E_LYALPHA)
+        L_Lyalpha_dusty = ION_TO_LYALPHA * ALPHA_B * E_LYALPHA * self.recombination_integral(self.shell_strctre_i)
         self.Lyalpha_Luminosity_ratio = L_Lyalpha_dusty / L_Lyalpha_noDust
         self.force_multiplier = velocityFactor * self.Lyalpha_radiationPressure_fudgeFactor * self.get_dusty_forceMultiplier(columnDensity_H1)
         return self.force_multiplier * (L_Lyalpha_dusty / C)
+
+    @staticmethod
+    def recombination_integral(sol):
+        """Integral over the ionized layer of n^2 exp(-(tau_end - tau)) 4 pi r^2 dr [cm^-3]: recombinations per
+        alpha_B, attenuated by the dust between each point and the layer's outer edge. 3-point Gauss-Legendre on each
+        step of the ionized solve, on its dense output (sol.y rows: n, phi, tau_d, m), so the value is accurate to the
+        solve's tolerance and moves smoothly with the state."""
+        r = sol.t
+        if r.size < 2:
+            return 0.0
+        tau_end = sol.y[2][-1]
+        x, w = np.polynomial.legendre.leggauss(3)
+        a, b = r[:-1], r[1:]
+        rq = (0.5 * (b - a)[:, None] * x[None, :] + 0.5 * (a + b)[:, None]).ravel()
+        n, tau = sol.sol(rq)[[0, 2]]
+        f = n**2 * np.exp(-(tau_end - tau)) * 4 * np.pi * rq**2
+        return float(np.sum(f.reshape(a.size, 3) * w[None, :] * 0.5 * (b - a)[:, None]))
 
     def get_Lyman_alpha_veloFactor(self, V_sh):
         """
